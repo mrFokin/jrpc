@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 )
 
 // HandlerFunc - json-rpc handler
@@ -15,11 +15,6 @@ type HandlerFunc func(c Context) error
 type JRPC interface {
 	Method(method string, handler HandlerFunc)
 }
-
-const (
-	version         = "2.0"
-	batchRequestKey = '['
-)
 
 type jrpc struct {
 	methods map[string]HandlerFunc

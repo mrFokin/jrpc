@@ -7,6 +7,11 @@ import (
 	"net/http"
 )
 
+const (
+	version         = "2.0"
+	batchRequestKey = '['
+)
+
 type request struct {
 	Version string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
