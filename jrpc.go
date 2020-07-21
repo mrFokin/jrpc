@@ -11,21 +11,27 @@ import (
 // HandlerFunc - json-rpc handler
 type HandlerFunc func(c Context) error
 
+// HandlerMiddleware - json-rpc  middleware handler
+type HandlerMiddleware func(raw json.RawMessage) (json.RawMessage, error)
+
 // JRPC interface
 type JRPC interface {
 	Method(method string, handler HandlerFunc)
+	Middleware(order int, handler HandlerMiddleware)
 }
 
 type jrpc struct {
-	methods map[string]HandlerFunc
-	echo    *echo.Echo
+	methods    map[string]HandlerFunc
+	echo       *echo.Echo
+	middleware map[int]HandlerMiddleware
 }
 
 // Endpoint create instance of jrpc route
 func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) JRPC {
 	j := &jrpc{
-		methods: make(map[string]HandlerFunc),
-		echo:    e,
+		methods:    make(map[string]HandlerFunc),
+		echo:       e,
+		middleware: make(map[int]HandlerMiddleware),
 	}
 
 	j.echo.Add(http.MethodPost, path, j.jrpcHandler, m...)
@@ -48,6 +54,20 @@ func HandleMethod(ec echo.Context, method HandlerFunc, params json.RawMessage) (
 // Method add handler for jrpc method
 func (j *jrpc) Method(m string, h HandlerFunc) {
 	j.methods[m] = h
+}
+
+// HandleMiddleware run jrpc middleware
+func HandleMiddleware(middleware HandlerMiddleware, raw json.RawMessage) (json.RawMessage, Error) {
+	raw, e := middleware(raw)
+	if e != nil {
+		return nil, e
+	}
+	return raw, nil
+}
+
+// Middleware add middleware for jrpc method
+func (j *jrpc) Middleware(m int, h HandlerMiddleware) {
+	j.middleware[m] = h
 }
 
 func (j *jrpc) jrpcHandler(c echo.Context) error {
@@ -79,6 +99,10 @@ func (j *jrpc) jrpcHandler(c echo.Context) error {
 	responses := make([]response, 0, len(rawRequests))
 	for _, raw := range rawRequests {
 		resp := response{Version: version}
+
+		for _, v := range j.middleware {
+			raw, resp.Error = HandleMiddleware(v, raw)
+		}
 
 		req, err := parseRawRequest(raw)
 		if err != nil {
