@@ -2,6 +2,7 @@ package jrpc
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -197,6 +198,43 @@ func TestHandler(t *testing.T) {
 	}
 }
 
+func TestMiddleware(t *testing.T) {
+	testCases := []struct {
+		when string
+		req  string
+		res  string
+	}{
+		{
+			when: "when first middleware return err",
+			req:  `{"jsonrpc":"2.0","method":"middleware","params":123,"id":"8"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"First"},"id":"8"}`,
+		},
+		{
+			when: "when second middleware return err",
+			req:  `{"jsonrpc":"2.0","method":"middleware","params":234,"id":"9"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"Second"},"id":"9"}`,
+		},
+		{
+			when: "when middlewares is ok",
+			req:  `{"jsonrpc":"2.0","method":"middleware","params":321,"id":"10"}`,
+			res:  `{"jsonrpc":"2.0","result":"Param: 321","id":"10"}`,
+		},
+	}
+
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Method("middleware", methodWithParameter, middlewareFirst, middlewareSecond)
+
+	for _, tc := range testCases {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tc.req))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equalf(t, http.StatusOK, rec.Code, "Invalid response code %s", tc.when)
+		assert.Equalf(t, tc.res, strings.TrimRight(rec.Body.String(), "\n"), "Invalid response body %s", tc.when)
+	}
+}
+
 func methodSubtract(c Context) error {
 	var p []int
 	if err := c.Bind(&p); err != nil {
@@ -241,4 +279,43 @@ func methodNotify(c Context) error {
 func methodWithoutParams(c Context) error {
 	res := []interface{}{"hello", 5}
 	return c.Result(res)
+}
+
+func methodWithParameter(c Context) error {
+	var i int
+	if err := c.Bind(&i); err != nil {
+		return err
+	}
+
+	return c.Result(fmt.Sprintf("Param: %d", i))
+}
+
+func middlewareFirst(next HandlerFunc) HandlerFunc {
+	return func(c Context) error {
+		var i int
+		if err := c.Bind(&i); err != nil {
+			return err
+		}
+
+		if i == 123 {
+			return NewErrorInvalidParams("First")
+		}
+
+		return next(c)
+	}
+}
+
+func middlewareSecond(next HandlerFunc) HandlerFunc {
+	return func(c Context) error {
+		var i int
+		if err := c.Bind(&i); err != nil {
+			return err
+		}
+
+		if i == 234 {
+			return NewErrorInvalidParams("Second")
+		}
+
+		return next(c)
+	}
 }

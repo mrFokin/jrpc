@@ -11,9 +11,12 @@ import (
 // HandlerFunc - json-rpc handler
 type HandlerFunc func(c Context) error
 
+// MiddlewareFunc defines a function to process json-rpc middleware.
+type MiddlewareFunc func(HandlerFunc) HandlerFunc
+
 // JRPC interface
 type JRPC interface {
-	Method(method string, handler HandlerFunc)
+	Method(method string, handler HandlerFunc, middleware ...MiddlewareFunc)
 }
 
 type jrpc struct {
@@ -46,8 +49,16 @@ func HandleMethod(ec echo.Context, method HandlerFunc, params json.RawMessage) (
 }
 
 // Method add handler for jrpc method
-func (j *jrpc) Method(m string, h HandlerFunc) {
+func (j *jrpc) Method(m string, handler HandlerFunc, middleware ...MiddlewareFunc) {
+	h := j.applyMiddleware(handler, middleware...)
 	j.methods[m] = h
+}
+
+func (j *jrpc) applyMiddleware(h HandlerFunc, middleware ...MiddlewareFunc) HandlerFunc {
+	for i := len(middleware) - 1; i >= 0; i-- {
+		h = middleware[i](h)
+	}
+	return h
 }
 
 func (j *jrpc) jrpcHandler(c echo.Context) error {
