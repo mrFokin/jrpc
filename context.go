@@ -8,6 +8,7 @@ import (
 
 // Context - json-rpc context
 type Context interface {
+	EchoContext() echo.Context
 	Bind(interface{}) error
 	Result(interface{}) error
 }
@@ -35,4 +36,9 @@ func (c *context) Result(v interface{}) error {
 
 	c.result = res
 	return nil
+}
+
+// Context return echo context
+func (c *context) EchoContext() echo.Context {
+	return c.Context
 }
