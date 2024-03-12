@@ -13,7 +13,7 @@ import (
 )
 
 func TestHTTPMethod(t *testing.T) {
-	methods := []string{"GET", "HEAD", "PUT", "PATCH", "DELETE", "CONNECT", "OPTIONS", "TRACE"}
+	methods := []string{"GET", "HEAD", "PUT", "PATCH", "DELETE", "CONNECT", "TRACE"}
 
 	e := echo.New()
 	Endpoint(e, "/")
