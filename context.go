@@ -11,17 +11,19 @@ type Context interface {
 	EchoContext() echo.Context
 	Bind(interface{}) error
 	Result(interface{}) error
+	Request() *Request
 }
 
 type context struct {
 	echo.Context
-	params json.RawMessage
+	request *Request
+	//params json.RawMessage
 	result json.RawMessage
 }
 
 // Bind parse input params
 func (c *context) Bind(v interface{}) error {
-	if err := json.Unmarshal(c.params, v); err != nil {
+	if err := json.Unmarshal(c.request.Params, v); err != nil {
 		return NewErrorInvalidParams(nil)
 	}
 	return nil
@@ -38,7 +40,12 @@ func (c *context) Result(v interface{}) error {
 	return nil
 }
 
-// Context return echo context
+// EchoContext return echo context
 func (c *context) EchoContext() echo.Context {
 	return c.Context
+}
+
+// Request return jrpc request
+func (c *context) Request() *Request {
+	return c.request
 }
