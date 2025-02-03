@@ -12,7 +12,7 @@ const (
 	batchRequestKey = '['
 )
 
-type request struct {
+type Request struct {
 	Version string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params"`
@@ -40,8 +40,8 @@ func parseBody(req *http.Request) (batch bool, requests []json.RawMessage, err e
 	return
 }
 
-func parseRawRequest(raw json.RawMessage) (req *request, err error) {
-	req = &request{}
+func parseRawRequest(raw json.RawMessage) (req *Request, err error) {
+	req = &Request{}
 	if err = json.Unmarshal(raw, req); err != nil {
 		return nil, err
 	}
