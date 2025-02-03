@@ -56,6 +56,18 @@ func TestEmptyRequest(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code, "Empty request must return error 400 Bad Request")
 }
 
+func TestGroupRouter(t *testing.T) {
+
+	e := echo.New()
+	g := e.Group("/group")
+	Endpoint(g, "/jrpc")
+	req := httptest.NewRequest(http.MethodPost, "/group/jrpc", nil)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "Empty request must return error 400 Bad Request")
+}
+
 func TestHandler(t *testing.T) {
 	testCases := []struct {
 		when string
