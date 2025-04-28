@@ -19,13 +19,17 @@ type JRPC interface {
 	Method(method string, handler HandlerFunc, middleware ...MiddlewareFunc)
 }
 
+type EchoRouter interface {
+	Add(method, path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route
+}
+
 type jrpc struct {
 	methods map[string]HandlerFunc
-	echo    *echo.Echo
+	echo    EchoRouter
 }
 
 // Endpoint create instance of jrpc route
-func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) JRPC {
+func Endpoint(e EchoRouter, path string, m ...echo.MiddlewareFunc) JRPC {
 	j := &jrpc{
 		methods: make(map[string]HandlerFunc),
 		echo:    e,
