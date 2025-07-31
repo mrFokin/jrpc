@@ -13,27 +13,27 @@ type Error interface {
 	Error() string
 }
 
-type jrpcError struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+type JRPCError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 // Error - implements error interface
-func (e *jrpcError) Error() string {
+func (e *JRPCError) Error() string {
 	return fmt.Sprintf("jrpc: code: %d, message: %s, data: %+v", e.Code, e.Message, e.Data)
 }
 
 // NewError creates instance of error
 func NewError(code int, message string, data interface{}) error {
-	return &jrpcError{Code: code, Message: message, Data: data}
+	return &JRPCError{Code: code, Message: message, Data: data}
 }
 
 // NewErrorInvalidParams - helper func for create instance of Invalid params error
 func NewErrorInvalidParams(data interface{}) error {
-	return &jrpcError{Code: -32602, Message: "Invalid params", Data: data}
+	return &JRPCError{Code: -32602, Message: "Invalid params", Data: data}
 }
 
-func errorInternal(data interface{}) *jrpcError {
-	return &jrpcError{Code: -32603, Message: "Internal error", Data: data}
+func errorInternal(data interface{}) *JRPCError {
+	return &JRPCError{Code: -32603, Message: "Internal error", Data: data}
 }

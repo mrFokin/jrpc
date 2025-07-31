@@ -39,7 +39,7 @@ func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) JRPC {
 func HandleMethod(ec echo.Context, method HandlerFunc, request *Request) (json.RawMessage, Error) {
 	cc := &context{Context: ec, request: request}
 	if e := method(cc); e != nil {
-		err, ok := e.(*jrpcError)
+		err, ok := e.(*JRPCError)
 		if !ok {
 			err = errorInternal(e.Error())
 		}
