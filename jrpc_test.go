@@ -38,11 +38,13 @@ func TestContentType(t *testing.T) {
 		assert.Equalf(t, http.StatusUnsupportedMediaType, rec.Code, "Request with Content-Type %s must return error 415 Unsupported Media Type", tp)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/", nil)
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-	assert.NotEqual(t, http.StatusUnsupportedMediaType, rec.Code, "Request with Content-Type application/json mustn't return error")
+	for _, ct := range []string{echo.MIMEApplicationJSON, echo.MIMEApplicationJSONCharsetUTF8, "Application/JSON"} {
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set(echo.HeaderContentType, ct)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.NotEqualf(t, http.StatusUnsupportedMediaType, rec.Code, "Request with Content-Type %s mustn't return error", ct)
+	}
 }
 
 func TestEmptyRequest(t *testing.T) {
@@ -52,7 +54,11 @@ func TestEmptyRequest(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusBadRequest, rec.Code, "Empty request must return error 400 Bad Request")
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t,
+		`{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`,
+		strings.TrimRight(rec.Body.String(), "\n"),
+	)
 }
 
 func TestEmptyBodyUnknownLength(t *testing.T) {

@@ -4,6 +4,7 @@ package jrpc
 import (
 	"encoding/json"
 	"io"
+	"mime"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -63,12 +64,9 @@ func (j *jrpc) applyMiddleware(h HandlerFunc, middleware ...MiddlewareFunc) Hand
 }
 
 func (j *jrpc) jrpcHandler(c echo.Context) error {
-	if c.Request().Header.Get(echo.HeaderContentType) != echo.MIMEApplicationJSON {
+	mediaType, _, err := mime.ParseMediaType(c.Request().Header.Get(echo.HeaderContentType))
+	if err != nil || mediaType != echo.MIMEApplicationJSON {
 		return echo.NewHTTPError(http.StatusUnsupportedMediaType)
-	}
-
-	if c.Request().ContentLength == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(c.Request().Body, maxRequestBody+1))
