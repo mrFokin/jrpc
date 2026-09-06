@@ -337,6 +337,31 @@ func TestMiddleware(t *testing.T) {
 	}
 }
 
+func TestMethodConcurrent(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Method("notify", methodNotify)
+
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 50; i++ {
+			j.Method("notify", methodNotify)
+			j.Method(fmt.Sprintf("m%d", i), methodNotify)
+		}
+		close(done)
+	}()
+
+	body := `{"jsonrpc":"2.0","method":"notify","id":1}`
+	for i := 0; i < 50; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+	}
+	<-done
+}
+
 func methodSubtract(c Context) error {
 	var p []int
 	if err := c.Bind(&p); err != nil {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"sync"
 
 	"github.com/labstack/echo/v4"
 )
@@ -23,6 +24,7 @@ type JRPC interface {
 }
 
 type jrpc struct {
+	mu      sync.RWMutex
 	methods map[string]HandlerFunc
 	echo    *echo.Echo
 }
@@ -56,7 +58,15 @@ func handleMethod(ec echo.Context, method HandlerFunc, request *Request) (json.R
 // Method add handler for jrpc method
 func (j *jrpc) Method(m string, handler HandlerFunc, middleware ...MiddlewareFunc) {
 	h := j.applyMiddleware(handler, middleware...)
+	j.mu.Lock()
 	j.methods[m] = h
+	j.mu.Unlock()
+}
+
+func (j *jrpc) lookup(name string) HandlerFunc {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	return j.methods[name]
 }
 
 func (j *jrpc) applyMiddleware(h HandlerFunc, middleware ...MiddlewareFunc) HandlerFunc {
@@ -106,7 +116,7 @@ func (j *jrpc) jrpcHandler(c echo.Context) error {
 
 		resp.ID = req.ID.value
 
-		method := j.methods[req.Method]
+		method := j.lookup(req.Method)
 		if method == nil {
 			if req.ID.present {
 				resp.Error = errorMethodNotFound
