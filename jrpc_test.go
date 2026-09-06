@@ -98,6 +98,17 @@ func TestHandler(t *testing.T) {
 			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
 		},
 		{
+			when: "when rpc call Batch with leading whitespace",
+			req: "\n" +
+				`[{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":"1"}]`,
+			res: `[{"jsonrpc":"2.0","result":19,"id":"1"}]`,
+		},
+		{
+			when: "when rpc call with whitespace only",
+			req:  "  \n\t",
+			res:  `{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`,
+		},
+		{
 			when: "when rpc call with an invalid Batch (but not empty)",
 			req:  `[1]`,
 			res:  `[{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}]`,

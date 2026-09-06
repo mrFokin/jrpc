@@ -1,6 +1,7 @@
 package jrpc
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 )
@@ -46,6 +47,7 @@ type response struct {
 }
 
 func parseBody(body []byte) (batch bool, requests []json.RawMessage, err error) {
+	body = bytes.TrimSpace(body)
 	if len(body) == 0 {
 		return false, nil, io.ErrUnexpectedEOF
 	}
