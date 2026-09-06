@@ -223,6 +223,16 @@ func TestHandler(t *testing.T) {
 			res:  `{"jsonrpc":"2.0","error":{"code":256,"message":"User error","data":"Additional info"},"id":17}`,
 		},
 		{
+			when: "when rpc method panics",
+			req:  `{"jsonrpc":"2.0","method":"error.panic","id":"4"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error","data":"boom"},"id":"4"}`,
+		},
+		{
+			when: "when notification panics",
+			req:  `{"jsonrpc":"2.0","method":"error.panic"}`,
+			res:  ``,
+		},
+		{
 			when: "when rpc call with id null",
 			req:  `{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":null}`,
 			res:  `{"jsonrpc":"2.0","result":19,"id":null}`,
@@ -287,6 +297,7 @@ func TestHandler(t *testing.T) {
 	j.Method("error.standart", methodWithStandartError)
 	j.Method("error.user", methodWithUserError)
 	j.Method("error.wrapped", methodWithWrappedError)
+	j.Method("error.panic", methodWithPanic)
 	j.Method("notify", methodNotify)
 	j.Method("get_data", methodWithoutParams)
 
@@ -401,6 +412,10 @@ func methodWithUserError(c Context) error {
 
 func methodWithWrappedError(c Context) error {
 	return fmt.Errorf("wrap: %w", NewError(256, "User error", "Additional info"))
+}
+
+func methodWithPanic(c Context) error {
+	panic("boom")
 }
 
 func methodNotify(c Context) error {
