@@ -38,8 +38,7 @@ func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) JRPC {
 	return j
 }
 
-// HandleMethod run jrpc handler
-func HandleMethod(ec echo.Context, method HandlerFunc, request *Request) (json.RawMessage, error) {
+func handleMethod(ec echo.Context, method HandlerFunc, request *Request) (json.RawMessage, error) {
 	cc := &context{Context: ec, request: request}
 	if e := method(cc); e != nil {
 		var rpcErr *JRPCError
@@ -116,7 +115,7 @@ func (j *jrpc) jrpcHandler(c echo.Context) error {
 			continue
 		}
 
-		resp.Result, resp.Error = HandleMethod(c, method, req)
+		resp.Result, resp.Error = handleMethod(c, method, req)
 		if req.ID.present {
 			responses = append(responses, resp)
 		}
