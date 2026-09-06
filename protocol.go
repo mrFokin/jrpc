@@ -67,7 +67,7 @@ func parseRawRequest(raw json.RawMessage) (req *Request, err error) {
 		return nil, err
 	}
 
-	if req.Version != version {
+	if req.Version != version || req.Method == "" {
 		return nil, errorInvalidRequest
 	}
 

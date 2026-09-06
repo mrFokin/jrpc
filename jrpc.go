@@ -47,6 +47,9 @@ func HandleMethod(ec echo.Context, method HandlerFunc, request *Request) (json.R
 		}
 		return nil, err
 	}
+	if cc.result == nil {
+		return json.RawMessage("null"), nil
+	}
 	return cc.result, nil
 }
 

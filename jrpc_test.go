@@ -140,6 +140,21 @@ func TestHandler(t *testing.T) {
 			res:  `{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":"1"}`,
 		},
 		{
+			when: "when rpc call without method",
+			req:  `{"jsonrpc":"2.0","id":1}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
+		},
+		{
+			when: "when rpc call with empty method",
+			req:  `{"jsonrpc":"2.0","method":"","id":1}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
+		},
+		{
+			when: "when rpc call without result",
+			req:  `{"jsonrpc":"2.0","method":"notify","id":"1"}`,
+			res:  `{"jsonrpc":"2.0","result":null,"id":"1"}`,
+		},
+		{
 			when: "when rpc call with positional parameters",
 			req:  `{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":"1"}`,
 			res:  `{"jsonrpc":"2.0","result":19,"id":"1"}`,
