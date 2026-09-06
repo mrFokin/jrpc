@@ -189,8 +189,13 @@ func TestHandler(t *testing.T) {
 				`]`,
 			res: `[` +
 				`{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"There must be exactly 2 parameters"},"id":"2"},` +
-				`{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params"},"id":"3"}` +
+				`{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}` +
 				`]`,
+		},
+		{
+			when: "when rpc call with non-structured params",
+			req:  `{"jsonrpc":"2.0","method":"subtract","params":true,"id":"1"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
 		},
 		{
 			when: "when rpc method returns standart error",
@@ -282,17 +287,17 @@ func TestMiddleware(t *testing.T) {
 	}{
 		{
 			when: "when first middleware return err",
-			req:  `{"jsonrpc":"2.0","method":"middleware","params":123,"id":"8"}`,
+			req:  `{"jsonrpc":"2.0","method":"middleware","params":[123],"id":"8"}`,
 			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"First"},"id":"8"}`,
 		},
 		{
 			when: "when second middleware return err",
-			req:  `{"jsonrpc":"2.0","method":"middleware","params":234,"id":"9"}`,
+			req:  `{"jsonrpc":"2.0","method":"middleware","params":[234],"id":"9"}`,
 			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"Second"},"id":"9"}`,
 		},
 		{
 			when: "when middlewares is ok",
-			req:  `{"jsonrpc":"2.0","method":"middleware","params":321,"id":"10"}`,
+			req:  `{"jsonrpc":"2.0","method":"middleware","params":[321],"id":"10"}`,
 			res:  `{"jsonrpc":"2.0","result":"Param: 321","id":"10"}`,
 		},
 	}
@@ -357,41 +362,47 @@ func methodWithoutParams(c Context) error {
 	return c.Result(res)
 }
 
+func bindInt(c Context) (int, error) {
+	var p []int
+	if err := c.Bind(&p); err != nil {
+		return 0, err
+	}
+	if len(p) != 1 {
+		return 0, NewErrorInvalidParams(nil)
+	}
+	return p[0], nil
+}
+
 func methodWithParameter(c Context) error {
-	var i int
-	if err := c.Bind(&i); err != nil {
+	i, err := bindInt(c)
+	if err != nil {
 		return err
 	}
-
 	return c.Result(fmt.Sprintf("Param: %d", i))
 }
 
 func middlewareFirst(next HandlerFunc) HandlerFunc {
 	return func(c Context) error {
-		var i int
-		if err := c.Bind(&i); err != nil {
+		i, err := bindInt(c)
+		if err != nil {
 			return err
 		}
-
 		if i == 123 {
 			return NewErrorInvalidParams("First")
 		}
-
 		return next(c)
 	}
 }
 
 func middlewareSecond(next HandlerFunc) HandlerFunc {
 	return func(c Context) error {
-		var i int
-		if err := c.Bind(&i); err != nil {
+		i, err := bindInt(c)
+		if err != nil {
 			return err
 		}
-
 		if i == 234 {
 			return NewErrorInvalidParams("Second")
 		}
-
 		return next(c)
 	}
 }

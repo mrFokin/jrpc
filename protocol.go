@@ -73,5 +73,9 @@ func parseRawRequest(raw json.RawMessage) (req *Request, err error) {
 		return nil, errorInvalidRequest
 	}
 
+	if params := bytes.TrimSpace(req.Params); len(params) > 0 && params[0] != '[' && params[0] != '{' {
+		return nil, errorInvalidRequest
+	}
+
 	return
 }
