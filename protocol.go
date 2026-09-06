@@ -32,9 +32,10 @@ func (i *id) UnmarshalJSON(data []byte) error {
 	}
 }
 
+// Value returns the raw JSON id, or nil if the request is a notification.
 func (i id) Value() json.RawMessage { return i.value }
 
-// Request is a JSON-RPC 2.0 request.
+// Request is a JSON-RPC 2.0 request. Use ID.Value() for the raw JSON id.
 type Request struct {
 	Version string          `json:"jsonrpc"`
 	Method  string          `json:"method"`

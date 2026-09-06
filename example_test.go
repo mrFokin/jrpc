@@ -72,3 +72,64 @@ func ExampleNewError() {
 	fmt.Print(strings.TrimRight(rec.Body.String(), "\n"))
 	// Output: {"jsonrpc":"2.0","error":{"code":256,"message":"User error","data":"Additional info"},"id":17}
 }
+
+func ExampleJRPC_Method_middleware() {
+	requireAuth := func(next jrpc.HandlerFunc) jrpc.HandlerFunc {
+		return func(c jrpc.Context) error {
+			if c.EchoContext().Request().Header.Get("Authorization") == "" {
+				return jrpc.NewError(401, "unauthorized", nil)
+			}
+			return next(c)
+		}
+	}
+
+	e := echo.New()
+	j := jrpc.Endpoint(e, "/rpc")
+	j.Method("ping", func(c jrpc.Context) error {
+		return c.Result("ok")
+	}, requireAuth)
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc", strings.NewReader(
+		`{"jsonrpc":"2.0","method":"ping","id":1}`,
+	))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	fmt.Print(strings.TrimRight(rec.Body.String(), "\n"))
+	// Output: {"jsonrpc":"2.0","error":{"code":401,"message":"unauthorized"},"id":1}
+}
+
+func Example_notification() {
+	e := echo.New()
+	j := jrpc.Endpoint(e, "/rpc")
+	j.Method("ping", func(c jrpc.Context) error {
+		return nil
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc", strings.NewReader(
+		`{"jsonrpc":"2.0","method":"ping"}`,
+	))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	fmt.Printf("%d %q", rec.Code, rec.Body.String())
+	// Output: 200 ""
+}
+
+func ExampleContext_EchoContext() {
+	e := echo.New()
+	j := jrpc.Endpoint(e, "/rpc")
+	j.Method("who", func(c jrpc.Context) error {
+		return c.Result(c.EchoContext().Request().Header.Get("X-User"))
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc", strings.NewReader(
+		`{"jsonrpc":"2.0","method":"who","id":1}`,
+	))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set("X-User", "denis")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	fmt.Print(strings.TrimRight(rec.Body.String(), "\n"))
+	// Output: {"jsonrpc":"2.0","result":"denis","id":1}
+}

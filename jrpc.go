@@ -1,4 +1,16 @@
-// Package jrpc implements JSON-RPC 2.0 for labstack echo server
+// Package jrpc implements JSON-RPC 2.0 for Echo.
+//
+// Call [Endpoint] to register a POST route, then [JRPC.Method] or [Handle]
+// to add methods. Only POST with Content-Type application/json is accepted.
+// Bodies larger than 1 MiB are rejected with 413.
+//
+// A notification (no id) returns HTTP 200 with an empty body.
+// A handler that does not call [Context.Result] responds with JSON null.
+// Return [NewError] or [NewErrorInvalidParams] from a handler; a plain error
+// and a panic become Internal error (-32603).
+//
+// The request id is available as Request.ID.Value(). This package does not
+// provide HandleMethod, a JRPC interface, or a WebSocket transport.
 package jrpc
 
 import (

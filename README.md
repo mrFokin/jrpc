@@ -8,6 +8,16 @@ JSON-RPC 2.0 for [Echo](https://echo.labstack.com).
 - Method-level middleware
 - Typed handlers via `Handle`
 
+## API (v1)
+
+- Echo v4 only. `Endpoint` registers `POST` and accepts `application/json` only.
+- Register methods with `Handle` (typed params and result) or `Method` (manual `Bind` / `Result`).
+- Return `NewError` or `NewErrorInvalidParams`. A plain `error` and a panic become Internal error (`-32603`).
+- No `id` (notification) → HTTP 200 and an empty body. No `Result` → JSON `null`.
+- Request id: `c.Request().ID.Value()`.
+- Body limit: 1 MiB (`413`). Batch → JSON array of responses.
+- Not in this package: `HandleMethod`, a `JRPC` interface, WebSocket, other HTTP frameworks.
+
 ## Install
 
 ```bash
@@ -96,10 +106,3 @@ j.Method("subtract", handler, logMethod)
 ```
 
 Echo middleware still applies to the HTTP route via `Endpoint`.
-
-## Protocol
-
-- POST and `application/json` only
-- Request body is limited to 1 MiB
-- A notification (no `id`) returns `200` with an empty body
-- A batch request returns an array of responses

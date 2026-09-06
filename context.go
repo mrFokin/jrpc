@@ -8,9 +8,13 @@ import (
 
 // Context is the JSON-RPC request context passed to method handlers.
 type Context interface {
+	// EchoContext returns the Echo context of the HTTP request.
 	EchoContext() echo.Context
+	// Bind unmarshals request params into v. Missing or empty params leave v unchanged.
 	Bind(interface{}) error
+	// Result sets the JSON-RPC result. If Result is not called, the response is null.
 	Result(interface{}) error
+	// Request returns the current JSON-RPC request. Use Request().ID.Value() for the raw JSON id.
 	Request() *Request
 }
 
