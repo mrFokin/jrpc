@@ -19,20 +19,15 @@ type HandlerFunc func(c Context) error
 // MiddlewareFunc defines a function to process json-rpc middleware.
 type MiddlewareFunc func(HandlerFunc) HandlerFunc
 
-// JRPC interface
-type JRPC interface {
-	Method(method string, handler HandlerFunc, middleware ...MiddlewareFunc)
-}
-
-type jrpc struct {
+type JRPC struct {
 	mu      sync.RWMutex
 	methods map[string]HandlerFunc
 	echo    *echo.Echo
 }
 
 // Endpoint create instance of jrpc route
-func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) JRPC {
-	j := &jrpc{
+func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) *JRPC {
+	j := &JRPC{
 		methods: make(map[string]HandlerFunc),
 		echo:    e,
 	}
@@ -63,27 +58,27 @@ func handleMethod(ec echo.Context, method HandlerFunc, request *Request) (result
 }
 
 // Method add handler for jrpc method
-func (j *jrpc) Method(m string, handler HandlerFunc, middleware ...MiddlewareFunc) {
+func (j *JRPC) Method(m string, handler HandlerFunc, middleware ...MiddlewareFunc) {
 	h := j.applyMiddleware(handler, middleware...)
 	j.mu.Lock()
 	j.methods[m] = h
 	j.mu.Unlock()
 }
 
-func (j *jrpc) lookup(name string) HandlerFunc {
+func (j *JRPC) lookup(name string) HandlerFunc {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
 	return j.methods[name]
 }
 
-func (j *jrpc) applyMiddleware(h HandlerFunc, middleware ...MiddlewareFunc) HandlerFunc {
+func (j *JRPC) applyMiddleware(h HandlerFunc, middleware ...MiddlewareFunc) HandlerFunc {
 	for i := len(middleware) - 1; i >= 0; i-- {
 		h = middleware[i](h)
 	}
 	return h
 }
 
-func (j *jrpc) jrpcHandler(c echo.Context) error {
+func (j *JRPC) jrpcHandler(c echo.Context) error {
 	mediaType, _, err := mime.ParseMediaType(c.Request().Header.Get(echo.HeaderContentType))
 	if err != nil || mediaType != echo.MIMEApplicationJSON {
 		return echo.NewHTTPError(http.StatusUnsupportedMediaType)
