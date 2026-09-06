@@ -3,21 +3,44 @@ package jrpc
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
-	"net/http"
 )
 
 const (
 	version         = "2.0"
 	batchRequestKey = '['
+	maxRequestBody  = 1 << 20
 )
 
+type id struct {
+	value   json.RawMessage
+	present bool
+}
+
+func (i *id) UnmarshalJSON(data []byte) error {
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	switch v.(type) {
+	case nil, string, float64:
+		i.value = bytes.Clone(data)
+		i.present = true
+		return nil
+	default:
+		return errorInvalidRequest
+	}
+}
+
+// Value returns the raw JSON id, or nil if the request is a notification.
+func (i id) Value() json.RawMessage { return i.value }
+
+// Request is a JSON-RPC 2.0 request. Use ID.Value() for the raw JSON id.
 type Request struct {
 	Version string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params"`
-	ID      any             `json:"id"`
+	ID      id              `json:"id"`
 }
 
 type response struct {
@@ -27,14 +50,13 @@ type response struct {
 	ID      any             `json:"id"`
 }
 
-func parseBody(req *http.Request) (batch bool, requests []json.RawMessage, err error) {
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		err = fmt.Errorf("read body: %w", err)
-		return
+func parseBody(body []byte) (batch bool, requests []json.RawMessage, err error) {
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 {
+		return false, nil, io.ErrUnexpectedEOF
 	}
 
-	if bytes.ContainsRune(body[:1], batchRequestKey) {
+	if body[0] == batchRequestKey {
 		batch = true
 		err = json.Unmarshal(body, &requests)
 	} else {
@@ -51,7 +73,11 @@ func parseRawRequest(raw json.RawMessage) (req *Request, err error) {
 		return nil, err
 	}
 
-	if req.Version != version {
+	if req.Version != version || req.Method == "" {
+		return nil, errorInvalidRequest
+	}
+
+	if params := bytes.TrimSpace(req.Params); len(params) > 0 && params[0] != '[' && params[0] != '{' {
 		return nil, errorInvalidRequest
 	}
 

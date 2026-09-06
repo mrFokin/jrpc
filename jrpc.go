@@ -1,32 +1,46 @@
-// Package jrpc implements JSON-RPC 2.0 for labstack echo server
+// Package jrpc implements JSON-RPC 2.0 for Echo.
+//
+// Call [Endpoint] to register a POST route, then [JRPC.Method] or [Handle]
+// to add methods. Only POST with Content-Type application/json is accepted.
+// Bodies larger than 1 MiB are rejected with 413.
+//
+// A notification (no id) returns HTTP 200 with an empty body.
+// A handler that does not call [Context.Result] responds with JSON null.
+// Return [NewError] or [NewErrorInvalidParams] from a handler; a plain error
+// and a panic become Internal error (-32603).
+//
+// The request id is available as Request.ID.Value(). This package does not
+// provide HandleMethod, a JRPC interface, or a WebSocket transport.
 package jrpc
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"mime"
 	"net/http"
+	"sync"
 
 	"github.com/labstack/echo/v4"
 )
 
-// HandlerFunc - json-rpc handler
+// HandlerFunc is a JSON-RPC method handler.
 type HandlerFunc func(c Context) error
 
-// MiddlewareFunc defines a function to process json-rpc middleware.
+// MiddlewareFunc wraps a JSON-RPC method handler.
 type MiddlewareFunc func(HandlerFunc) HandlerFunc
 
-// JRPC interface
-type JRPC interface {
-	Method(method string, handler HandlerFunc, middleware ...MiddlewareFunc)
-}
-
-type jrpc struct {
+// JRPC is a JSON-RPC 2.0 endpoint mounted on an Echo server.
+type JRPC struct {
+	mu      sync.RWMutex
 	methods map[string]HandlerFunc
 	echo    *echo.Echo
 }
 
-// Endpoint create instance of jrpc route
-func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) JRPC {
-	j := &jrpc{
+// Endpoint registers a JSON-RPC 2.0 POST route at path and returns the endpoint.
+func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) *JRPC {
+	j := &JRPC{
 		methods: make(map[string]HandlerFunc),
 		echo:    e,
 	}
@@ -35,48 +49,81 @@ func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) JRPC {
 	return j
 }
 
-// HandleMethod run jrpc handler
-func HandleMethod(ec echo.Context, method HandlerFunc, request *Request) (json.RawMessage, Error) {
+func handleMethod(ec echo.Context, method HandlerFunc, request *Request) (result json.RawMessage, err error) {
 	cc := &context{Context: ec, request: request}
-	if e := method(cc); e != nil {
-		err, ok := e.(*JRPCError)
-		if !ok {
-			err = errorInternal(e.Error())
+	defer func() {
+		if r := recover(); r != nil {
+			result = nil
+			err = errorInternal(fmt.Sprint(r))
 		}
-		return nil, err
+	}()
+	if e := method(cc); e != nil {
+		var rpcErr *JRPCError
+		if !errors.As(e, &rpcErr) {
+			rpcErr = errorInternal(e.Error())
+		}
+		return nil, rpcErr
+	}
+	if cc.result == nil {
+		return json.RawMessage("null"), nil
 	}
 	return cc.result, nil
 }
 
-// Method add handler for jrpc method
-func (j *jrpc) Method(m string, handler HandlerFunc, middleware ...MiddlewareFunc) {
+// Method registers a JSON-RPC method. Optional middleware wraps the handler.
+func (j *JRPC) Method(m string, handler HandlerFunc, middleware ...MiddlewareFunc) {
 	h := j.applyMiddleware(handler, middleware...)
+	j.mu.Lock()
 	j.methods[m] = h
+	j.mu.Unlock()
 }
 
-func (j *jrpc) applyMiddleware(h HandlerFunc, middleware ...MiddlewareFunc) HandlerFunc {
+// Handle registers a typed JSON-RPC method. Params are bound to P and the
+// returned value is sent as the result.
+func Handle[P, R any](j *JRPC, name string, fn func(Context, P) (R, error), mw ...MiddlewareFunc) {
+	j.Method(name, func(c Context) error {
+		var p P
+		if err := c.Bind(&p); err != nil {
+			return err
+		}
+		res, err := fn(c, p)
+		if err != nil {
+			return err
+		}
+		return c.Result(res)
+	}, mw...)
+}
+
+func (j *JRPC) lookup(name string) HandlerFunc {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	return j.methods[name]
+}
+
+func (j *JRPC) applyMiddleware(h HandlerFunc, middleware ...MiddlewareFunc) HandlerFunc {
 	for i := len(middleware) - 1; i >= 0; i-- {
 		h = middleware[i](h)
 	}
 	return h
 }
 
-func (j *jrpc) jrpcHandler(c echo.Context) error {
-	if c.Request().Header.Get(echo.HeaderContentType) != echo.MIMEApplicationJSON {
+func (j *JRPC) jrpcHandler(c echo.Context) error {
+	mediaType, _, err := mime.ParseMediaType(c.Request().Header.Get(echo.HeaderContentType))
+	if err != nil || mediaType != echo.MIMEApplicationJSON {
 		return echo.NewHTTPError(http.StatusUnsupportedMediaType)
 	}
 
-	if c.Request().ContentLength == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest)
+	body, err := io.ReadAll(io.LimitReader(c.Request().Body, maxRequestBody+1))
+	if err != nil {
+		return c.JSON(http.StatusOK, response{Version: version, Error: errorParse})
+	}
+	if int64(len(body)) > maxRequestBody {
+		return echo.NewHTTPError(http.StatusRequestEntityTooLarge)
 	}
 
-	batch, rawRequests, err := parseBody(c.Request())
+	batch, rawRequests, err := parseBody(body)
 	if err != nil {
-		resp := response{
-			Version: version,
-			Error:   errorParse,
-		}
-		return c.JSON(http.StatusOK, resp)
+		return c.JSON(http.StatusOK, response{Version: version, Error: errorParse})
 	}
 
 	if len(rawRequests) == 0 {
@@ -98,18 +145,19 @@ func (j *jrpc) jrpcHandler(c echo.Context) error {
 			continue
 		}
 
-		resp.ID = req.ID
+		resp.ID = req.ID.value
 
-		method := j.methods[req.Method]
+		method := j.lookup(req.Method)
 		if method == nil {
-			resp.Error = errorMethodNotFound
-			responses = append(responses, resp)
+			if req.ID.present {
+				resp.Error = errorMethodNotFound
+				responses = append(responses, resp)
+			}
 			continue
 		}
 
-		resp.Result, resp.Error = HandleMethod(c, method, req)
-
-		if resp.Error != nil || resp.ID != nil {
+		resp.Result, resp.Error = handleMethod(c, method, req)
+		if req.ID.present {
 			responses = append(responses, resp)
 		}
 	}

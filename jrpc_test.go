@@ -38,22 +38,52 @@ func TestContentType(t *testing.T) {
 		assert.Equalf(t, http.StatusUnsupportedMediaType, rec.Code, "Request with Content-Type %s must return error 415 Unsupported Media Type", tp)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/", nil)
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-	assert.NotEqual(t, http.StatusUnsupportedMediaType, rec.Code, "Request with Content-Type application/json mustn't return error")
+	for _, ct := range []string{echo.MIMEApplicationJSON, echo.MIMEApplicationJSONCharsetUTF8, "Application/JSON"} {
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set(echo.HeaderContentType, ct)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.NotEqualf(t, http.StatusUnsupportedMediaType, rec.Code, "Request with Content-Type %s mustn't return error", ct)
+	}
 }
 
 func TestEmptyRequest(t *testing.T) {
-
 	e := echo.New()
 	Endpoint(e, "/")
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusBadRequest, rec.Code, "Empty request must return error 400 Bad Request")
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t,
+		`{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`,
+		strings.TrimRight(rec.Body.String(), "\n"),
+	)
+}
+
+func TestEmptyBodyUnknownLength(t *testing.T) {
+	e := echo.New()
+	Endpoint(e, "/")
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
+	req.ContentLength = -1
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t,
+		`{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`,
+		strings.TrimRight(rec.Body.String(), "\n"),
+	)
+}
+
+func TestRequestBodyTooLarge(t *testing.T) {
+	e := echo.New()
+	Endpoint(e, "/")
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("a", maxRequestBody+1)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
 }
 
 func TestHandler(t *testing.T) {
@@ -66,6 +96,17 @@ func TestHandler(t *testing.T) {
 			when: "when rpc call with an empty Array",
 			req:  `[]`,
 			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
+		},
+		{
+			when: "when rpc call Batch with leading whitespace",
+			req: "\n" +
+				`[{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":"1"}]`,
+			res: `[{"jsonrpc":"2.0","result":19,"id":"1"}]`,
+		},
+		{
+			when: "when rpc call with whitespace only",
+			req:  "  \n\t",
+			res:  `{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`,
 		},
 		{
 			when: "when rpc call with an invalid Batch (but not empty)",
@@ -110,6 +151,21 @@ func TestHandler(t *testing.T) {
 			res:  `{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":"1"}`,
 		},
 		{
+			when: "when rpc call without method",
+			req:  `{"jsonrpc":"2.0","id":1}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
+		},
+		{
+			when: "when rpc call with empty method",
+			req:  `{"jsonrpc":"2.0","method":"","id":1}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
+		},
+		{
+			when: "when rpc call without result",
+			req:  `{"jsonrpc":"2.0","method":"notify","id":"1"}`,
+			res:  `{"jsonrpc":"2.0","result":null,"id":"1"}`,
+		},
+		{
 			when: "when rpc call with positional parameters",
 			req:  `{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":"1"}`,
 			res:  `{"jsonrpc":"2.0","result":19,"id":"1"}`,
@@ -133,8 +189,23 @@ func TestHandler(t *testing.T) {
 				`]`,
 			res: `[` +
 				`{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"There must be exactly 2 parameters"},"id":"2"},` +
-				`{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params"},"id":"3"}` +
+				`{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}` +
 				`]`,
+		},
+		{
+			when: "when rpc call with non-structured params",
+			req:  `{"jsonrpc":"2.0","method":"subtract","params":true,"id":"1"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
+		},
+		{
+			when: "when rpc call without params binds to zero value",
+			req:  `{"jsonrpc":"2.0","method":"subtract.object","id":"1"}`,
+			res:  `{"jsonrpc":"2.0","result":0,"id":"1"}`,
+		},
+		{
+			when: "when rpc call without params required by method",
+			req:  `{"jsonrpc":"2.0","method":"subtract","id":"1"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"There must be exactly 2 parameters"},"id":"1"}`,
 		},
 		{
 			when: "when rpc method returns standart error",
@@ -145,6 +216,46 @@ func TestHandler(t *testing.T) {
 			when: "when rpc method return user-specific error",
 			req:  `{"jsonrpc":"2.0","method":"error.user","id":17}`,
 			res:  `{"jsonrpc":"2.0","error":{"code":256,"message":"User error","data":"Additional info"},"id":17}`,
+		},
+		{
+			when: "when rpc method returns wrapped jrpc error",
+			req:  `{"jsonrpc":"2.0","method":"error.wrapped","id":17}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":256,"message":"User error","data":"Additional info"},"id":17}`,
+		},
+		{
+			when: "when rpc method panics",
+			req:  `{"jsonrpc":"2.0","method":"error.panic","id":"4"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error","data":"boom"},"id":"4"}`,
+		},
+		{
+			when: "when notification panics",
+			req:  `{"jsonrpc":"2.0","method":"error.panic"}`,
+			res:  ``,
+		},
+		{
+			when: "when rpc call with id null",
+			req:  `{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":null}`,
+			res:  `{"jsonrpc":"2.0","result":19,"id":null}`,
+		},
+		{
+			when: "when rpc call with large integer id",
+			req:  `{"jsonrpc":"2.0","method":"notify","id":9007199254740993}`,
+			res:  `{"jsonrpc":"2.0","result":null,"id":9007199254740993}`,
+		},
+		{
+			when: "when rpc call with invalid id type",
+			req:  `{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":{}}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
+		},
+		{
+			when: "when notification of non-existent method",
+			req:  `{"jsonrpc":"2.0","method":"non.exist"}`,
+			res:  ``,
+		},
+		{
+			when: "when notification returns error",
+			req:  `{"jsonrpc":"2.0","method":"error.standart"}`,
+			res:  ``,
 		},
 		{
 			when: "when rpc call is a Notification",
@@ -185,8 +296,58 @@ func TestHandler(t *testing.T) {
 	j.Method("subtract.object", methodSubtractWithObject)
 	j.Method("error.standart", methodWithStandartError)
 	j.Method("error.user", methodWithUserError)
+	j.Method("error.wrapped", methodWithWrappedError)
+	j.Method("error.panic", methodWithPanic)
 	j.Method("notify", methodNotify)
 	j.Method("get_data", methodWithoutParams)
+
+	for _, tc := range testCases {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tc.req))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equalf(t, http.StatusOK, rec.Code, "Invalid response code %s", tc.when)
+		assert.Equalf(t, tc.res, strings.TrimRight(rec.Body.String(), "\n"), "Invalid response body %s", tc.when)
+	}
+}
+
+func TestHandle(t *testing.T) {
+	testCases := []struct {
+		when string
+		req  string
+		res  string
+	}{
+		{
+			when: "when handle with named parameters",
+			req:  `{"jsonrpc":"2.0","method":"subtract.handle","params":{"minuend":42,"subtrahend":23},"id":"1"}`,
+			res:  `{"jsonrpc":"2.0","result":19,"id":"1"}`,
+		},
+		{
+			when: "when handle without params uses zero value",
+			req:  `{"jsonrpc":"2.0","method":"subtract.handle","id":"1"}`,
+			res:  `{"jsonrpc":"2.0","result":0,"id":"1"}`,
+		},
+		{
+			when: "when handle bind fails",
+			req:  `{"jsonrpc":"2.0","method":"subtract.handle","params":{"minuend":"x"},"id":"1"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params"},"id":"1"}`,
+		},
+		{
+			when: "when handle returns error",
+			req:  `{"jsonrpc":"2.0","method":"subtract.pos","params":[1],"id":"1"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"exactly 2 parameters"},"id":"1"}`,
+		},
+		{
+			when: "when handle with positional parameters",
+			req:  `{"jsonrpc":"2.0","method":"subtract.pos","params":[42,23],"id":"1"}`,
+			res:  `{"jsonrpc":"2.0","result":19,"id":"1"}`,
+		},
+	}
+
+	e := echo.New()
+	j := Endpoint(e, "/")
+	Handle(j, "subtract.handle", handleSubtract)
+	Handle(j, "subtract.pos", handleSubtractPos)
 
 	for _, tc := range testCases {
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tc.req))
@@ -206,17 +367,17 @@ func TestMiddleware(t *testing.T) {
 	}{
 		{
 			when: "when first middleware return err",
-			req:  `{"jsonrpc":"2.0","method":"middleware","params":123,"id":"8"}`,
+			req:  `{"jsonrpc":"2.0","method":"middleware","params":[123],"id":"8"}`,
 			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"First"},"id":"8"}`,
 		},
 		{
 			when: "when second middleware return err",
-			req:  `{"jsonrpc":"2.0","method":"middleware","params":234,"id":"9"}`,
+			req:  `{"jsonrpc":"2.0","method":"middleware","params":[234],"id":"9"}`,
 			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"Second"},"id":"9"}`,
 		},
 		{
 			when: "when middlewares is ok",
-			req:  `{"jsonrpc":"2.0","method":"middleware","params":321,"id":"10"}`,
+			req:  `{"jsonrpc":"2.0","method":"middleware","params":[321],"id":"10"}`,
 			res:  `{"jsonrpc":"2.0","result":"Param: 321","id":"10"}`,
 		},
 	}
@@ -233,6 +394,31 @@ func TestMiddleware(t *testing.T) {
 		assert.Equalf(t, http.StatusOK, rec.Code, "Invalid response code %s", tc.when)
 		assert.Equalf(t, tc.res, strings.TrimRight(rec.Body.String(), "\n"), "Invalid response body %s", tc.when)
 	}
+}
+
+func TestMethodConcurrent(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Method("notify", methodNotify)
+
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 50; i++ {
+			j.Method("notify", methodNotify)
+			j.Method(fmt.Sprintf("m%d", i), methodNotify)
+		}
+		close(done)
+	}()
+
+	body := `{"jsonrpc":"2.0","method":"notify","id":1}`
+	for i := 0; i < 50; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+	}
+	<-done
 }
 
 func methodSubtract(c Context) error {
@@ -262,6 +448,17 @@ func methodSubtractWithObject(c Context) error {
 	return c.Result(p.Minuend - p.Subtrahend)
 }
 
+func handleSubtract(c Context, p subtract) (int, error) {
+	return p.Minuend - p.Subtrahend, nil
+}
+
+func handleSubtractPos(c Context, p []int) (int, error) {
+	if len(p) != 2 {
+		return 0, NewErrorInvalidParams("exactly 2 parameters")
+	}
+	return p[0] - p[1], nil
+}
+
 func methodWithStandartError(c Context) error {
 	c.Result("Result must be ignored")
 	return errors.New("Error message")
@@ -270,6 +467,14 @@ func methodWithStandartError(c Context) error {
 func methodWithUserError(c Context) error {
 	c.Result("Result must be ignored")
 	return NewError(256, "User error", "Additional info")
+}
+
+func methodWithWrappedError(c Context) error {
+	return fmt.Errorf("wrap: %w", NewError(256, "User error", "Additional info"))
+}
+
+func methodWithPanic(c Context) error {
+	panic("boom")
 }
 
 func methodNotify(c Context) error {
@@ -281,41 +486,47 @@ func methodWithoutParams(c Context) error {
 	return c.Result(res)
 }
 
+func bindInt(c Context) (int, error) {
+	var p []int
+	if err := c.Bind(&p); err != nil {
+		return 0, err
+	}
+	if len(p) != 1 {
+		return 0, NewErrorInvalidParams(nil)
+	}
+	return p[0], nil
+}
+
 func methodWithParameter(c Context) error {
-	var i int
-	if err := c.Bind(&i); err != nil {
+	i, err := bindInt(c)
+	if err != nil {
 		return err
 	}
-
 	return c.Result(fmt.Sprintf("Param: %d", i))
 }
 
 func middlewareFirst(next HandlerFunc) HandlerFunc {
 	return func(c Context) error {
-		var i int
-		if err := c.Bind(&i); err != nil {
+		i, err := bindInt(c)
+		if err != nil {
 			return err
 		}
-
 		if i == 123 {
 			return NewErrorInvalidParams("First")
 		}
-
 		return next(c)
 	}
 }
 
 func middlewareSecond(next HandlerFunc) HandlerFunc {
 	return func(c Context) error {
-		var i int
-		if err := c.Bind(&i); err != nil {
+		i, err := bindInt(c)
+		if err != nil {
 			return err
 		}
-
 		if i == 234 {
 			return NewErrorInvalidParams("Second")
 		}
-
 		return next(c)
 	}
 }
