@@ -3,6 +3,7 @@ package jrpc
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"net/http"
@@ -38,14 +39,14 @@ func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) JRPC {
 }
 
 // HandleMethod run jrpc handler
-func HandleMethod(ec echo.Context, method HandlerFunc, request *Request) (json.RawMessage, Error) {
+func HandleMethod(ec echo.Context, method HandlerFunc, request *Request) (json.RawMessage, error) {
 	cc := &context{Context: ec, request: request}
 	if e := method(cc); e != nil {
-		err, ok := e.(*JRPCError)
-		if !ok {
-			err = errorInternal(e.Error())
+		var rpcErr *JRPCError
+		if !errors.As(e, &rpcErr) {
+			rpcErr = errorInternal(e.Error())
 		}
-		return nil, err
+		return nil, rpcErr
 	}
 	if cc.result == nil {
 		return json.RawMessage("null"), nil

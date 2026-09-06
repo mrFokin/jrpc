@@ -8,11 +8,6 @@ var (
 	errorMethodNotFound = NewError(-32601, "Method not found", nil)
 )
 
-// Error - json-rpc error interface
-type Error interface {
-	Error() string
-}
-
 type JRPCError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`

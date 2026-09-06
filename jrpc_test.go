@@ -218,6 +218,11 @@ func TestHandler(t *testing.T) {
 			res:  `{"jsonrpc":"2.0","error":{"code":256,"message":"User error","data":"Additional info"},"id":17}`,
 		},
 		{
+			when: "when rpc method returns wrapped jrpc error",
+			req:  `{"jsonrpc":"2.0","method":"error.wrapped","id":17}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":256,"message":"User error","data":"Additional info"},"id":17}`,
+		},
+		{
 			when: "when rpc call with id null",
 			req:  `{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":null}`,
 			res:  `{"jsonrpc":"2.0","result":19,"id":null}`,
@@ -276,6 +281,7 @@ func TestHandler(t *testing.T) {
 	j.Method("subtract.object", methodSubtractWithObject)
 	j.Method("error.standart", methodWithStandartError)
 	j.Method("error.user", methodWithUserError)
+	j.Method("error.wrapped", methodWithWrappedError)
 	j.Method("notify", methodNotify)
 	j.Method("get_data", methodWithoutParams)
 
@@ -361,6 +367,10 @@ func methodWithStandartError(c Context) error {
 func methodWithUserError(c Context) error {
 	c.Result("Result must be ignored")
 	return NewError(256, "User error", "Additional info")
+}
+
+func methodWithWrappedError(c Context) error {
+	return fmt.Errorf("wrap: %w", NewError(256, "User error", "Additional info"))
 }
 
 func methodNotify(c Context) error {
