@@ -6,7 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// Context - json-rpc context
+// Context is the JSON-RPC request context passed to method handlers.
 type Context interface {
 	EchoContext() echo.Context
 	Bind(interface{}) error

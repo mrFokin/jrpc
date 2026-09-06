@@ -34,6 +34,7 @@ func (i *id) UnmarshalJSON(data []byte) error {
 
 func (i id) Value() json.RawMessage { return i.value }
 
+// Request is a JSON-RPC 2.0 request.
 type Request struct {
 	Version string          `json:"jsonrpc"`
 	Method  string          `json:"method"`

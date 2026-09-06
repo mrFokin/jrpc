@@ -13,19 +13,20 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// HandlerFunc - json-rpc handler
+// HandlerFunc is a JSON-RPC method handler.
 type HandlerFunc func(c Context) error
 
-// MiddlewareFunc defines a function to process json-rpc middleware.
+// MiddlewareFunc wraps a JSON-RPC method handler.
 type MiddlewareFunc func(HandlerFunc) HandlerFunc
 
+// JRPC is a JSON-RPC 2.0 endpoint mounted on an Echo server.
 type JRPC struct {
 	mu      sync.RWMutex
 	methods map[string]HandlerFunc
 	echo    *echo.Echo
 }
 
-// Endpoint create instance of jrpc route
+// Endpoint registers a JSON-RPC 2.0 POST route at path and returns the endpoint.
 func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) *JRPC {
 	j := &JRPC{
 		methods: make(map[string]HandlerFunc),
@@ -57,7 +58,7 @@ func handleMethod(ec echo.Context, method HandlerFunc, request *Request) (result
 	return cc.result, nil
 }
 
-// Method add handler for jrpc method
+// Method registers a JSON-RPC method. Optional middleware wraps the handler.
 func (j *JRPC) Method(m string, handler HandlerFunc, middleware ...MiddlewareFunc) {
 	h := j.applyMiddleware(handler, middleware...)
 	j.mu.Lock()
@@ -65,6 +66,8 @@ func (j *JRPC) Method(m string, handler HandlerFunc, middleware ...MiddlewareFun
 	j.mu.Unlock()
 }
 
+// Handle registers a typed JSON-RPC method. Params are bound to P and the
+// returned value is sent as the result.
 func Handle[P, R any](j *JRPC, name string, fn func(Context, P) (R, error), mw ...MiddlewareFunc) {
 	j.Method(name, func(c Context) error {
 		var p P
