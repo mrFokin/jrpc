@@ -46,7 +46,6 @@ func TestContentType(t *testing.T) {
 }
 
 func TestEmptyRequest(t *testing.T) {
-
 	e := echo.New()
 	Endpoint(e, "/")
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -54,6 +53,31 @@ func TestEmptyRequest(t *testing.T) {
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code, "Empty request must return error 400 Bad Request")
+}
+
+func TestEmptyBodyUnknownLength(t *testing.T) {
+	e := echo.New()
+	Endpoint(e, "/")
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
+	req.ContentLength = -1
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t,
+		`{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`,
+		strings.TrimRight(rec.Body.String(), "\n"),
+	)
+}
+
+func TestRequestBodyTooLarge(t *testing.T) {
+	e := echo.New()
+	Endpoint(e, "/")
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("a", maxRequestBody+1)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
 }
 
 func TestHandler(t *testing.T) {

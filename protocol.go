@@ -1,16 +1,14 @@
 package jrpc
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
-	"net/http"
 )
 
 const (
 	version         = "2.0"
 	batchRequestKey = '['
+	maxRequestBody  = 1 << 20
 )
 
 type Request struct {
@@ -27,14 +25,12 @@ type response struct {
 	ID      any             `json:"id"`
 }
 
-func parseBody(req *http.Request) (batch bool, requests []json.RawMessage, err error) {
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		err = fmt.Errorf("read body: %w", err)
-		return
+func parseBody(body []byte) (batch bool, requests []json.RawMessage, err error) {
+	if len(body) == 0 {
+		return false, nil, io.ErrUnexpectedEOF
 	}
 
-	if bytes.ContainsRune(body[:1], batchRequestKey) {
+	if body[0] == batchRequestKey {
 		batch = true
 		err = json.Unmarshal(body, &requests)
 	} else {

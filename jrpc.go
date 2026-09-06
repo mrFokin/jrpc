@@ -3,6 +3,7 @@ package jrpc
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -70,13 +71,17 @@ func (j *jrpc) jrpcHandler(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest)
 	}
 
-	batch, rawRequests, err := parseBody(c.Request())
+	body, err := io.ReadAll(io.LimitReader(c.Request().Body, maxRequestBody+1))
 	if err != nil {
-		resp := response{
-			Version: version,
-			Error:   errorParse,
-		}
-		return c.JSON(http.StatusOK, resp)
+		return c.JSON(http.StatusOK, response{Version: version, Error: errorParse})
+	}
+	if int64(len(body)) > maxRequestBody {
+		return echo.NewHTTPError(http.StatusRequestEntityTooLarge)
+	}
+
+	batch, rawRequests, err := parseBody(body)
+	if err != nil {
+		return c.JSON(http.StatusOK, response{Version: version, Error: errorParse})
 	}
 
 	if len(rawRequests) == 0 {
