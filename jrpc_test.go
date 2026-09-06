@@ -198,6 +198,16 @@ func TestHandler(t *testing.T) {
 			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
 		},
 		{
+			when: "when rpc call without params binds to zero value",
+			req:  `{"jsonrpc":"2.0","method":"subtract.object","id":"1"}`,
+			res:  `{"jsonrpc":"2.0","result":0,"id":"1"}`,
+		},
+		{
+			when: "when rpc call without params required by method",
+			req:  `{"jsonrpc":"2.0","method":"subtract","id":"1"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"There must be exactly 2 parameters"},"id":"1"}`,
+		},
+		{
 			when: "when rpc method returns standart error",
 			req:  `{"jsonrpc":"2.0","method":"error.standart","id":"3"}`,
 			res:  `{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error","data":"Error message"},"id":"3"}`,

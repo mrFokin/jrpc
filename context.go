@@ -23,6 +23,9 @@ type context struct {
 
 // Bind parse input params
 func (c *context) Bind(v interface{}) error {
+	if len(c.request.Params) == 0 {
+		return nil
+	}
 	if err := json.Unmarshal(c.request.Params, v); err != nil {
 		return NewErrorInvalidParams(nil)
 	}
