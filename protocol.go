@@ -11,11 +11,31 @@ const (
 	maxRequestBody  = 1 << 20
 )
 
+type id struct {
+	value   any
+	present bool
+}
+
+func (i *id) UnmarshalJSON(data []byte) error {
+	if err := json.Unmarshal(data, &i.value); err != nil {
+		return err
+	}
+	switch i.value.(type) {
+	case nil, string, float64:
+		i.present = true
+		return nil
+	default:
+		return errorInvalidRequest
+	}
+}
+
+func (i id) Value() any { return i.value }
+
 type Request struct {
 	Version string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params"`
-	ID      any             `json:"id"`
+	ID      id              `json:"id"`
 }
 
 type response struct {

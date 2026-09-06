@@ -103,18 +103,19 @@ func (j *jrpc) jrpcHandler(c echo.Context) error {
 			continue
 		}
 
-		resp.ID = req.ID
+		resp.ID = req.ID.value
 
 		method := j.methods[req.Method]
 		if method == nil {
-			resp.Error = errorMethodNotFound
-			responses = append(responses, resp)
+			if req.ID.present {
+				resp.Error = errorMethodNotFound
+				responses = append(responses, resp)
+			}
 			continue
 		}
 
 		resp.Result, resp.Error = HandleMethod(c, method, req)
-
-		if resp.Error != nil || resp.ID != nil {
+		if req.ID.present {
 			responses = append(responses, resp)
 		}
 	}

@@ -171,6 +171,26 @@ func TestHandler(t *testing.T) {
 			res:  `{"jsonrpc":"2.0","error":{"code":256,"message":"User error","data":"Additional info"},"id":17}`,
 		},
 		{
+			when: "when rpc call with id null",
+			req:  `{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":null}`,
+			res:  `{"jsonrpc":"2.0","result":19,"id":null}`,
+		},
+		{
+			when: "when rpc call with invalid id type",
+			req:  `{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":{}}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
+		},
+		{
+			when: "when notification of non-existent method",
+			req:  `{"jsonrpc":"2.0","method":"non.exist"}`,
+			res:  ``,
+		},
+		{
+			when: "when notification returns error",
+			req:  `{"jsonrpc":"2.0","method":"error.standart"}`,
+			res:  ``,
+		},
+		{
 			when: "when rpc call is a Notification",
 			req:  `{"jsonrpc":"2.0","method":"subtract","params":[42,23]}`,
 			res:  ``,
