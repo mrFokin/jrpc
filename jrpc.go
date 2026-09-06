@@ -65,6 +65,20 @@ func (j *JRPC) Method(m string, handler HandlerFunc, middleware ...MiddlewareFun
 	j.mu.Unlock()
 }
 
+func Handle[P, R any](j *JRPC, name string, fn func(Context, P) (R, error), mw ...MiddlewareFunc) {
+	j.Method(name, func(c Context) error {
+		var p P
+		if err := c.Bind(&p); err != nil {
+			return err
+		}
+		res, err := fn(c, p)
+		if err != nil {
+			return err
+		}
+		return c.Result(res)
+	}, mw...)
+}
+
 func (j *JRPC) lookup(name string) HandlerFunc {
 	j.mu.RLock()
 	defer j.mu.RUnlock()

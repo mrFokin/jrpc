@@ -311,6 +311,54 @@ func TestHandler(t *testing.T) {
 	}
 }
 
+func TestHandle(t *testing.T) {
+	testCases := []struct {
+		when string
+		req  string
+		res  string
+	}{
+		{
+			when: "when handle with named parameters",
+			req:  `{"jsonrpc":"2.0","method":"subtract.handle","params":{"minuend":42,"subtrahend":23},"id":"1"}`,
+			res:  `{"jsonrpc":"2.0","result":19,"id":"1"}`,
+		},
+		{
+			when: "when handle without params uses zero value",
+			req:  `{"jsonrpc":"2.0","method":"subtract.handle","id":"1"}`,
+			res:  `{"jsonrpc":"2.0","result":0,"id":"1"}`,
+		},
+		{
+			when: "when handle bind fails",
+			req:  `{"jsonrpc":"2.0","method":"subtract.handle","params":{"minuend":"x"},"id":"1"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params"},"id":"1"}`,
+		},
+		{
+			when: "when handle returns error",
+			req:  `{"jsonrpc":"2.0","method":"subtract.pos","params":[1],"id":"1"}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"exactly 2 parameters"},"id":"1"}`,
+		},
+		{
+			when: "when handle with positional parameters",
+			req:  `{"jsonrpc":"2.0","method":"subtract.pos","params":[42,23],"id":"1"}`,
+			res:  `{"jsonrpc":"2.0","result":19,"id":"1"}`,
+		},
+	}
+
+	e := echo.New()
+	j := Endpoint(e, "/")
+	Handle(j, "subtract.handle", handleSubtract)
+	Handle(j, "subtract.pos", handleSubtractPos)
+
+	for _, tc := range testCases {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tc.req))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equalf(t, http.StatusOK, rec.Code, "Invalid response code %s", tc.when)
+		assert.Equalf(t, tc.res, strings.TrimRight(rec.Body.String(), "\n"), "Invalid response body %s", tc.when)
+	}
+}
+
 func TestMiddleware(t *testing.T) {
 	testCases := []struct {
 		when string
@@ -398,6 +446,17 @@ func methodSubtractWithObject(c Context) error {
 	}
 
 	return c.Result(p.Minuend - p.Subtrahend)
+}
+
+func handleSubtract(c Context, p subtract) (int, error) {
+	return p.Minuend - p.Subtrahend, nil
+}
+
+func handleSubtractPos(c Context, p []int) (int, error) {
+	if len(p) != 2 {
+		return 0, NewErrorInvalidParams("exactly 2 parameters")
+	}
+	return p[0] - p[1], nil
 }
 
 func methodWithStandartError(c Context) error {
