@@ -228,6 +228,11 @@ func TestHandler(t *testing.T) {
 			res:  `{"jsonrpc":"2.0","result":19,"id":null}`,
 		},
 		{
+			when: "when rpc call with large integer id",
+			req:  `{"jsonrpc":"2.0","method":"notify","id":9007199254740993}`,
+			res:  `{"jsonrpc":"2.0","result":null,"id":9007199254740993}`,
+		},
+		{
 			when: "when rpc call with invalid id type",
 			req:  `{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":{}}`,
 			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,

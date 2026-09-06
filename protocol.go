@@ -13,16 +13,18 @@ const (
 )
 
 type id struct {
-	value   any
+	value   json.RawMessage
 	present bool
 }
 
 func (i *id) UnmarshalJSON(data []byte) error {
-	if err := json.Unmarshal(data, &i.value); err != nil {
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
 		return err
 	}
-	switch i.value.(type) {
+	switch v.(type) {
 	case nil, string, float64:
+		i.value = bytes.Clone(data)
 		i.present = true
 		return nil
 	default:
@@ -30,7 +32,7 @@ func (i *id) UnmarshalJSON(data []byte) error {
 	}
 }
 
-func (i id) Value() any { return i.value }
+func (i id) Value() json.RawMessage { return i.value }
 
 type Request struct {
 	Version string          `json:"jsonrpc"`
