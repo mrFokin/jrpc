@@ -17,8 +17,7 @@ type Context interface {
 type context struct {
 	echo.Context
 	request *Request
-	//params json.RawMessage
-	result json.RawMessage
+	result  json.RawMessage
 }
 
 // Bind parse input params
