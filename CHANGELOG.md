@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-07
+
+Go 1.27. Typed registration is `Method` on `*JRPC`; manual `HandlerFunc` is `Handler`.
+
 ### Added
 
 - API (v1) contract in README
@@ -90,6 +94,7 @@ JSON-RPC 2.0 request handling is closer to the spec. The public API is smaller a
 - Go modules
 - Echo v4
 
+[1.1.0]: https://github.com/mrFokin/jrpc/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/mrFokin/jrpc/compare/v0.9.5...v1.0.0
 [0.9.5]: https://github.com/mrFokin/jrpc/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/mrFokin/jrpc/compare/v0.9.3...v0.9.4
