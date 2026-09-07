@@ -292,14 +292,14 @@ func TestHandler(t *testing.T) {
 
 	e := echo.New()
 	j := Endpoint(e, "/")
-	j.Method("subtract", methodSubtract)
-	j.Method("subtract.object", methodSubtractWithObject)
-	j.Method("error.standart", methodWithStandartError)
-	j.Method("error.user", methodWithUserError)
-	j.Method("error.wrapped", methodWithWrappedError)
-	j.Method("error.panic", methodWithPanic)
-	j.Method("notify", methodNotify)
-	j.Method("get_data", methodWithoutParams)
+	j.Handler("subtract", handleSubtract)
+	j.Handler("subtract.object", handleSubtractWithObject)
+	j.Handler("error.standart", handleWithStandartError)
+	j.Handler("error.user", handleWithUserError)
+	j.Handler("error.wrapped", handleWithWrappedError)
+	j.Handler("error.panic", handleWithPanic)
+	j.Handler("notify", handleNotify)
+	j.Handler("get_data", handleWithoutParams)
 
 	for _, tc := range testCases {
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tc.req))
@@ -311,34 +311,34 @@ func TestHandler(t *testing.T) {
 	}
 }
 
-func TestHandle(t *testing.T) {
+func TestMethod(t *testing.T) {
 	testCases := []struct {
 		when string
 		req  string
 		res  string
 	}{
 		{
-			when: "when handle with named parameters",
+			when: "when method with named parameters",
 			req:  `{"jsonrpc":"2.0","method":"subtract.handle","params":{"minuend":42,"subtrahend":23},"id":"1"}`,
 			res:  `{"jsonrpc":"2.0","result":19,"id":"1"}`,
 		},
 		{
-			when: "when handle without params uses zero value",
+			when: "when method without params uses zero value",
 			req:  `{"jsonrpc":"2.0","method":"subtract.handle","id":"1"}`,
 			res:  `{"jsonrpc":"2.0","result":0,"id":"1"}`,
 		},
 		{
-			when: "when handle bind fails",
+			when: "when method bind fails",
 			req:  `{"jsonrpc":"2.0","method":"subtract.handle","params":{"minuend":"x"},"id":"1"}`,
 			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params"},"id":"1"}`,
 		},
 		{
-			when: "when handle returns error",
+			when: "when method returns error",
 			req:  `{"jsonrpc":"2.0","method":"subtract.pos","params":[1],"id":"1"}`,
 			res:  `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"exactly 2 parameters"},"id":"1"}`,
 		},
 		{
-			when: "when handle with positional parameters",
+			when: "when method with positional parameters",
 			req:  `{"jsonrpc":"2.0","method":"subtract.pos","params":[42,23],"id":"1"}`,
 			res:  `{"jsonrpc":"2.0","result":19,"id":"1"}`,
 		},
@@ -346,8 +346,8 @@ func TestHandle(t *testing.T) {
 
 	e := echo.New()
 	j := Endpoint(e, "/")
-	Handle(j, "subtract.handle", handleSubtract)
-	Handle(j, "subtract.pos", handleSubtractPos)
+	j.Method("subtract.handle", methodSubtract)
+	j.Method("subtract.pos", methodSubtractPos)
 
 	for _, tc := range testCases {
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tc.req))
@@ -384,7 +384,7 @@ func TestMiddleware(t *testing.T) {
 
 	e := echo.New()
 	j := Endpoint(e, "/")
-	j.Method("middleware", methodWithParameter, middlewareFirst, middlewareSecond)
+	j.Handler("middleware", handleWithParameter, middlewareFirst, middlewareSecond)
 
 	for _, tc := range testCases {
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tc.req))
@@ -396,16 +396,16 @@ func TestMiddleware(t *testing.T) {
 	}
 }
 
-func TestMethodConcurrent(t *testing.T) {
+func TestHandlerConcurrent(t *testing.T) {
 	e := echo.New()
 	j := Endpoint(e, "/")
-	j.Method("notify", methodNotify)
+	j.Handler("notify", handleNotify)
 
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < 50; i++ {
-			j.Method("notify", methodNotify)
-			j.Method(fmt.Sprintf("m%d", i), methodNotify)
+			j.Handler("notify", handleNotify)
+			j.Handler(fmt.Sprintf("m%d", i), handleNotify)
 		}
 		close(done)
 	}()
@@ -421,7 +421,7 @@ func TestMethodConcurrent(t *testing.T) {
 	<-done
 }
 
-func methodSubtract(c Context) error {
+func handleSubtract(c Context) error {
 	var p []int
 	if err := c.Bind(&p); err != nil {
 		return err
@@ -439,7 +439,7 @@ type subtract struct {
 	Minuend    int `json:"minuend"`
 }
 
-func methodSubtractWithObject(c Context) error {
+func handleSubtractWithObject(c Context) error {
 	p := subtract{}
 	if err := c.Bind(&p); err != nil {
 		return err
@@ -448,40 +448,40 @@ func methodSubtractWithObject(c Context) error {
 	return c.Result(p.Minuend - p.Subtrahend)
 }
 
-func handleSubtract(c Context, p subtract) (int, error) {
+func methodSubtract(c Context, p subtract) (int, error) {
 	return p.Minuend - p.Subtrahend, nil
 }
 
-func handleSubtractPos(c Context, p []int) (int, error) {
+func methodSubtractPos(c Context, p []int) (int, error) {
 	if len(p) != 2 {
 		return 0, NewErrorInvalidParams("exactly 2 parameters")
 	}
 	return p[0] - p[1], nil
 }
 
-func methodWithStandartError(c Context) error {
+func handleWithStandartError(c Context) error {
 	c.Result("Result must be ignored")
 	return errors.New("Error message")
 }
 
-func methodWithUserError(c Context) error {
+func handleWithUserError(c Context) error {
 	c.Result("Result must be ignored")
 	return NewError(256, "User error", "Additional info")
 }
 
-func methodWithWrappedError(c Context) error {
+func handleWithWrappedError(c Context) error {
 	return fmt.Errorf("wrap: %w", NewError(256, "User error", "Additional info"))
 }
 
-func methodWithPanic(c Context) error {
+func handleWithPanic(c Context) error {
 	panic("boom")
 }
 
-func methodNotify(c Context) error {
+func handleNotify(c Context) error {
 	return nil
 }
 
-func methodWithoutParams(c Context) error {
+func handleWithoutParams(c Context) error {
 	res := []interface{}{"hello", 5}
 	return c.Result(res)
 }
@@ -497,7 +497,7 @@ func bindInt(c Context) (int, error) {
 	return p[0], nil
 }
 
-func methodWithParameter(c Context) error {
+func handleWithParameter(c Context) error {
 	i, err := bindInt(c)
 	if err != nil {
 		return err

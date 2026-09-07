@@ -1,6 +1,6 @@
 // Package jrpc implements JSON-RPC 2.0 for Echo.
 //
-// Call [Endpoint] to register a POST route, then [JRPC.Method] or [Handle]
+// Call [Endpoint] to register a POST route, then [JRPC.Method] or [JRPC.Handler]
 // to add methods. Only POST with Content-Type application/json is accepted.
 // Bodies larger than 1 MiB are rejected with 413.
 //
@@ -70,18 +70,18 @@ func handleMethod(ec echo.Context, method HandlerFunc, request *Request) (result
 	return cc.result, nil
 }
 
-// Method registers a JSON-RPC method. Optional middleware wraps the handler.
-func (j *JRPC) Method(m string, handler HandlerFunc, middleware ...MiddlewareFunc) {
+// Handler registers a JSON-RPC method. Optional middleware wraps the handler.
+func (j *JRPC) Handler(name string, handler HandlerFunc, middleware ...MiddlewareFunc) {
 	h := j.applyMiddleware(handler, middleware...)
 	j.mu.Lock()
-	j.methods[m] = h
+	j.methods[name] = h
 	j.mu.Unlock()
 }
 
-// Handle registers a typed JSON-RPC method. Params are bound to P and the
+// Method registers a typed JSON-RPC method. Params are bound to P and the
 // returned value is sent as the result.
-func Handle[P, R any](j *JRPC, name string, fn func(Context, P) (R, error), mw ...MiddlewareFunc) {
-	j.Method(name, func(c Context) error {
+func (j *JRPC) Method[P, R any](name string, fn func(Context, P) (R, error), mw ...MiddlewareFunc) {
+	j.Handler(name, func(c Context) error {
 		var p P
 		if err := c.Bind(&p); err != nil {
 			return err

@@ -6,12 +6,12 @@ JSON-RPC 2.0 for [Echo](https://echo.labstack.com).
 - Named and positional parameters
 - Notifications
 - Method-level middleware
-- Typed handlers via `Handle`
+- Typed handlers via `Method`
 
 ## API (v1)
 
 - Echo v4 only. `Endpoint` registers `POST` and accepts `application/json` only.
-- Register methods with `Handle` (typed params and result) or `Method` (manual `Bind` / `Result`).
+- Register methods with `Method` (typed params and result) or `Handler` (manual `Bind` / `Result`).
 - Return `NewError` or `NewErrorInvalidParams`. A plain `error` and a panic become Internal error (`-32603`).
 - No `id` (notification) → HTTP 200 and an empty body. No `Result` → JSON `null`.
 - Request id: `c.Request().ID.Value()`.
@@ -32,15 +32,11 @@ Register a POST endpoint, then add methods.
 e := echo.New()
 j := jrpc.Endpoint(e, "/rpc")
 
-j.Method("subtract", func(c jrpc.Context) error {
-    var p []int
-    if err := c.Bind(&p); err != nil {
-        return err
-    }
+j.Method("subtract", func(c jrpc.Context, p []int) (int, error) {
     if len(p) != 2 {
-        return jrpc.NewErrorInvalidParams("exactly 2 parameters")
+        return 0, jrpc.NewErrorInvalidParams("exactly 2 parameters")
     }
-    return c.Result(p[0] - p[1])
+    return p[0] - p[1], nil
 })
 
 e.Start(":8080")
@@ -57,9 +53,9 @@ Content-Type: application/json
 {"jsonrpc":"2.0","result":19,"id":"1"}
 ```
 
-### Typed handlers
+### Named parameters
 
-`Handle` binds params to a type and writes the return value as the result.
+`Method` binds params to a type and writes the return value as the result.
 
 ```go
 type subtract struct {
@@ -67,7 +63,7 @@ type subtract struct {
     Minuend    int `json:"minuend"`
 }
 
-jrpc.Handle(j, "subtract", func(c jrpc.Context, p subtract) (int, error) {
+j.Method("subtract", func(c jrpc.Context, p subtract) (int, error) {
     return p.Minuend - p.Subtrahend, nil
 })
 ```
@@ -81,7 +77,7 @@ jrpc.Handle(j, "subtract", func(c jrpc.Context, p subtract) (int, error) {
 Return `NewError` or `NewErrorInvalidParams` from a handler. A plain `error` and a panic become Internal error (`-32603`).
 
 ```go
-j.Method("fail", func(c jrpc.Context) error {
+j.Handler("fail", func(c jrpc.Context) error {
     return jrpc.NewError(256, "User error", "Additional info")
 })
 ```
@@ -102,7 +98,7 @@ func logMethod(next jrpc.HandlerFunc) jrpc.HandlerFunc {
     }
 }
 
-j.Method("subtract", handler, logMethod)
+j.Handler("subtract", handler, logMethod)
 ```
 
 Echo middleware still applies to the HTTP route via `Endpoint`.

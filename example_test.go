@@ -13,7 +13,27 @@ import (
 func ExampleEndpoint() {
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Method("subtract", func(c jrpc.Context) error {
+	j.Method("subtract", func(c jrpc.Context, p []int) (int, error) {
+		if len(p) != 2 {
+			return 0, jrpc.NewErrorInvalidParams("exactly 2 parameters")
+		}
+		return p[0] - p[1], nil
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc", strings.NewReader(
+		`{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":"1"}`,
+	))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	fmt.Print(strings.TrimRight(rec.Body.String(), "\n"))
+	// Output: {"jsonrpc":"2.0","result":19,"id":"1"}
+}
+
+func ExampleJRPC_Handler() {
+	e := echo.New()
+	j := jrpc.Endpoint(e, "/rpc")
+	j.Handler("subtract", func(c jrpc.Context) error {
 		var p []int
 		if err := c.Bind(&p); err != nil {
 			return err
@@ -34,7 +54,7 @@ func ExampleEndpoint() {
 	// Output: {"jsonrpc":"2.0","result":19,"id":"1"}
 }
 
-func ExampleHandle() {
+func ExampleJRPC_Method() {
 	type subtract struct {
 		Subtrahend int `json:"subtrahend"`
 		Minuend    int `json:"minuend"`
@@ -42,7 +62,7 @@ func ExampleHandle() {
 
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	jrpc.Handle(j, "subtract", func(c jrpc.Context, p subtract) (int, error) {
+	j.Method("subtract", func(c jrpc.Context, p subtract) (int, error) {
 		return p.Minuend - p.Subtrahend, nil
 	})
 
@@ -59,7 +79,7 @@ func ExampleHandle() {
 func ExampleNewError() {
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Method("fail", func(c jrpc.Context) error {
+	j.Handler("fail", func(c jrpc.Context) error {
 		return jrpc.NewError(256, "User error", "Additional info")
 	})
 
@@ -73,7 +93,7 @@ func ExampleNewError() {
 	// Output: {"jsonrpc":"2.0","error":{"code":256,"message":"User error","data":"Additional info"},"id":17}
 }
 
-func ExampleJRPC_Method_middleware() {
+func ExampleJRPC_Handler_middleware() {
 	requireAuth := func(next jrpc.HandlerFunc) jrpc.HandlerFunc {
 		return func(c jrpc.Context) error {
 			if c.EchoContext().Request().Header.Get("Authorization") == "" {
@@ -85,7 +105,7 @@ func ExampleJRPC_Method_middleware() {
 
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Method("ping", func(c jrpc.Context) error {
+	j.Handler("ping", func(c jrpc.Context) error {
 		return c.Result("ok")
 	}, requireAuth)
 
@@ -102,7 +122,7 @@ func ExampleJRPC_Method_middleware() {
 func Example_notification() {
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Method("ping", func(c jrpc.Context) error {
+	j.Handler("ping", func(c jrpc.Context) error {
 		return nil
 	})
 
@@ -119,7 +139,7 @@ func Example_notification() {
 func ExampleContext_EchoContext() {
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Method("who", func(c jrpc.Context) error {
+	j.Handler("who", func(c jrpc.Context) error {
 		return c.Result(c.EchoContext().Request().Header.Get("X-User"))
 	})
 

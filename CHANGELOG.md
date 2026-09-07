@@ -12,6 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API (v1) contract in README
 - Godoc examples for middleware, notifications, and `EchoContext`
 
+### Changed
+
+- Go 1.27
+- `Method` is a generic method on `*JRPC`: bind params to `P`, return `R`
+- `j.Method(name, handler)` → `j.Handler(name, handler)`
+
+### Removed
+
+- Package-level `Handle` (`jrpc.Handle(j, name, fn)` → `j.Method(name, fn)`)
+
 ## [1.0.0] - 2026-09-06
 
 JSON-RPC 2.0 request handling is closer to the spec. The public API is smaller and typed.
