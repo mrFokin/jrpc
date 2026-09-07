@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -421,7 +421,7 @@ func TestHandlerConcurrent(t *testing.T) {
 	<-done
 }
 
-func handleSubtract(c Context) error {
+func handleSubtract(c *Context) error {
 	var p []int
 	if err := c.Bind(&p); err != nil {
 		return err
@@ -439,7 +439,7 @@ type subtract struct {
 	Minuend    int `json:"minuend"`
 }
 
-func handleSubtractWithObject(c Context) error {
+func handleSubtractWithObject(c *Context) error {
 	p := subtract{}
 	if err := c.Bind(&p); err != nil {
 		return err
@@ -448,45 +448,45 @@ func handleSubtractWithObject(c Context) error {
 	return c.Result(p.Minuend - p.Subtrahend)
 }
 
-func methodSubtract(c Context, p subtract) (int, error) {
+func methodSubtract(c *Context, p subtract) (int, error) {
 	return p.Minuend - p.Subtrahend, nil
 }
 
-func methodSubtractPos(c Context, p []int) (int, error) {
+func methodSubtractPos(c *Context, p []int) (int, error) {
 	if len(p) != 2 {
 		return 0, NewErrorInvalidParams("exactly 2 parameters")
 	}
 	return p[0] - p[1], nil
 }
 
-func handleWithStandartError(c Context) error {
+func handleWithStandartError(c *Context) error {
 	c.Result("Result must be ignored")
 	return errors.New("Error message")
 }
 
-func handleWithUserError(c Context) error {
+func handleWithUserError(c *Context) error {
 	c.Result("Result must be ignored")
 	return NewError(256, "User error", "Additional info")
 }
 
-func handleWithWrappedError(c Context) error {
+func handleWithWrappedError(c *Context) error {
 	return fmt.Errorf("wrap: %w", NewError(256, "User error", "Additional info"))
 }
 
-func handleWithPanic(c Context) error {
+func handleWithPanic(c *Context) error {
 	panic("boom")
 }
 
-func handleNotify(c Context) error {
+func handleNotify(c *Context) error {
 	return nil
 }
 
-func handleWithoutParams(c Context) error {
+func handleWithoutParams(c *Context) error {
 	res := []interface{}{"hello", 5}
 	return c.Result(res)
 }
 
-func bindInt(c Context) (int, error) {
+func bindInt(c *Context) (int, error) {
 	var p []int
 	if err := c.Bind(&p); err != nil {
 		return 0, err
@@ -497,7 +497,7 @@ func bindInt(c Context) (int, error) {
 	return p[0], nil
 }
 
-func handleWithParameter(c Context) error {
+func handleWithParameter(c *Context) error {
 	i, err := bindInt(c)
 	if err != nil {
 		return err
@@ -506,7 +506,7 @@ func handleWithParameter(c Context) error {
 }
 
 func middlewareFirst(next HandlerFunc) HandlerFunc {
-	return func(c Context) error {
+	return func(c *Context) error {
 		i, err := bindInt(c)
 		if err != nil {
 			return err
@@ -519,7 +519,7 @@ func middlewareFirst(next HandlerFunc) HandlerFunc {
 }
 
 func middlewareSecond(next HandlerFunc) HandlerFunc {
-	return func(c Context) error {
+	return func(c *Context) error {
 		i, err := bindInt(c)
 		if err != nil {
 			return err

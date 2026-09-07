@@ -22,11 +22,11 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // HandlerFunc is a JSON-RPC method handler.
-type HandlerFunc func(c Context) error
+type HandlerFunc func(c *Context) error
 
 // MiddlewareFunc wraps a JSON-RPC method handler.
 type MiddlewareFunc func(HandlerFunc) HandlerFunc
@@ -49,8 +49,8 @@ func Endpoint(e *echo.Echo, path string, m ...echo.MiddlewareFunc) *JRPC {
 	return j
 }
 
-func handleMethod(ec echo.Context, method HandlerFunc, request *Request) (result json.RawMessage, err error) {
-	cc := &context{Context: ec, request: request}
+func handleMethod(ec *echo.Context, method HandlerFunc, request *Request) (result json.RawMessage, err error) {
+	cc := &Context{Echo: ec, request: request}
 	defer func() {
 		if r := recover(); r != nil {
 			result = nil
@@ -80,8 +80,8 @@ func (j *JRPC) Handler(name string, handler HandlerFunc, middleware ...Middlewar
 
 // Method registers a typed JSON-RPC method. Params are bound to P and the
 // returned value is sent as the result.
-func (j *JRPC) Method[P, R any](name string, fn func(Context, P) (R, error), mw ...MiddlewareFunc) {
-	j.Handler(name, func(c Context) error {
+func (j *JRPC) Method[P, R any](name string, fn func(*Context, P) (R, error), mw ...MiddlewareFunc) {
+	j.Handler(name, func(c *Context) error {
 		var p P
 		if err := c.Bind(&p); err != nil {
 			return err
@@ -107,10 +107,10 @@ func (j *JRPC) applyMiddleware(h HandlerFunc, middleware ...MiddlewareFunc) Hand
 	return h
 }
 
-func (j *JRPC) jrpcHandler(c echo.Context) error {
+func (j *JRPC) jrpcHandler(c *echo.Context) error {
 	mediaType, _, err := mime.ParseMediaType(c.Request().Header.Get(echo.HeaderContentType))
 	if err != nil || mediaType != echo.MIMEApplicationJSON {
-		return echo.NewHTTPError(http.StatusUnsupportedMediaType)
+		return echo.NewHTTPError(http.StatusUnsupportedMediaType, http.StatusText(http.StatusUnsupportedMediaType))
 	}
 
 	body, err := io.ReadAll(io.LimitReader(c.Request().Body, maxRequestBody+1))
@@ -118,7 +118,7 @@ func (j *JRPC) jrpcHandler(c echo.Context) error {
 		return c.JSON(http.StatusOK, response{Version: version, Error: errorParse})
 	}
 	if int64(len(body)) > maxRequestBody {
-		return echo.NewHTTPError(http.StatusRequestEntityTooLarge)
+		return echo.NewHTTPError(http.StatusRequestEntityTooLarge, http.StatusText(http.StatusRequestEntityTooLarge))
 	}
 
 	batch, rawRequests, err := parseBody(body)

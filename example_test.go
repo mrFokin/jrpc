@@ -6,14 +6,14 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"github.com/labstack/echo/v4"
-	"github.com/mrFokin/jrpc"
+	"github.com/labstack/echo/v5"
+	"github.com/mrFokin/jrpc/v2"
 )
 
 func ExampleEndpoint() {
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Method("subtract", func(c jrpc.Context, p []int) (int, error) {
+	j.Method("subtract", func(c *jrpc.Context, p []int) (int, error) {
 		if len(p) != 2 {
 			return 0, jrpc.NewErrorInvalidParams("exactly 2 parameters")
 		}
@@ -33,7 +33,7 @@ func ExampleEndpoint() {
 func ExampleJRPC_Handler() {
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Handler("subtract", func(c jrpc.Context) error {
+	j.Handler("subtract", func(c *jrpc.Context) error {
 		var p []int
 		if err := c.Bind(&p); err != nil {
 			return err
@@ -62,7 +62,7 @@ func ExampleJRPC_Method() {
 
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Method("subtract", func(c jrpc.Context, p subtract) (int, error) {
+	j.Method("subtract", func(c *jrpc.Context, p subtract) (int, error) {
 		return p.Minuend - p.Subtrahend, nil
 	})
 
@@ -79,7 +79,7 @@ func ExampleJRPC_Method() {
 func ExampleNewError() {
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Handler("fail", func(c jrpc.Context) error {
+	j.Handler("fail", func(c *jrpc.Context) error {
 		return jrpc.NewError(256, "User error", "Additional info")
 	})
 
@@ -95,8 +95,8 @@ func ExampleNewError() {
 
 func ExampleJRPC_Handler_middleware() {
 	requireAuth := func(next jrpc.HandlerFunc) jrpc.HandlerFunc {
-		return func(c jrpc.Context) error {
-			if c.EchoContext().Request().Header.Get("Authorization") == "" {
+		return func(c *jrpc.Context) error {
+			if c.Echo.Request().Header.Get("Authorization") == "" {
 				return jrpc.NewError(401, "unauthorized", nil)
 			}
 			return next(c)
@@ -105,7 +105,7 @@ func ExampleJRPC_Handler_middleware() {
 
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Handler("ping", func(c jrpc.Context) error {
+	j.Handler("ping", func(c *jrpc.Context) error {
 		return c.Result("ok")
 	}, requireAuth)
 
@@ -122,7 +122,7 @@ func ExampleJRPC_Handler_middleware() {
 func Example_notification() {
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Handler("ping", func(c jrpc.Context) error {
+	j.Handler("ping", func(c *jrpc.Context) error {
 		return nil
 	})
 
@@ -136,11 +136,11 @@ func Example_notification() {
 	// Output: 200 ""
 }
 
-func ExampleContext_EchoContext() {
+func ExampleContext() {
 	e := echo.New()
 	j := jrpc.Endpoint(e, "/rpc")
-	j.Handler("who", func(c jrpc.Context) error {
-		return c.Result(c.EchoContext().Request().Header.Get("X-User"))
+	j.Handler("who", func(c *jrpc.Context) error {
+		return c.Result(c.Echo.Request().Header.Get("X-User"))
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/rpc", strings.NewReader(

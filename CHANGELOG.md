@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-07
+
+Echo v5. Module path is `github.com/mrFokin/jrpc/v2`. Echo v4 remains on `v1.1.x`.
+
+### Changed
+
+- Echo v5
+- Module path `github.com/mrFokin/jrpc/v2`
+- `Context` is a struct; handlers take `*Context`
+- HTTP context is `c.Echo` (`*echo.Context`)
+
+### Removed
+
+- `Context` interface
+- `EchoContext()` (`c.Echo` instead)
+
 ## [1.1.0] - 2026-09-07
 
 Go 1.27. Typed registration is `Method` on `*JRPC`; manual `HandlerFunc` is `Handler`.
@@ -94,6 +110,8 @@ JSON-RPC 2.0 request handling is closer to the spec. The public API is smaller a
 - Go modules
 - Echo v4
 
+[Unreleased]: https://github.com/mrFokin/jrpc/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/mrFokin/jrpc/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/mrFokin/jrpc/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/mrFokin/jrpc/compare/v0.9.5...v1.0.0
 [0.9.5]: https://github.com/mrFokin/jrpc/compare/v0.9.4...v0.9.5
