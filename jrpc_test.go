@@ -154,12 +154,12 @@ func TestHandler(t *testing.T) {
 		{
 			when: "when rpc call without method",
 			req:  `{"jsonrpc":"2.0","id":1}`,
-			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":1}`,
 		},
 		{
 			when: "when rpc call with empty method",
 			req:  `{"jsonrpc":"2.0","method":"","id":1}`,
-			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":1}`,
 		},
 		{
 			when: "when rpc call without result",
@@ -190,13 +190,13 @@ func TestHandler(t *testing.T) {
 				`]`,
 			res: `[` +
 				`{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params","data":"There must be exactly 2 parameters"},"id":"2"},` +
-				`{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}` +
+				`{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":"3"}` +
 				`]`,
 		},
 		{
 			when: "when rpc call with non-structured params",
 			req:  `{"jsonrpc":"2.0","method":"subtract","params":true,"id":"1"}`,
-			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`,
+			res:  `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":"1"}`,
 		},
 		{
 			when: "when rpc call without params binds to zero value",
@@ -596,6 +596,48 @@ func TestParamsAndVersionEdgeCases(t *testing.T) {
 			"batch notifications partly invalid",
 			`[{"jsonrpc":"2.0","method":"x"},{"jsonrpc":"2.0","method":1}]`,
 			`[` + errInvalidRequestNullID + `]`,
+		},
+	})
+}
+
+func TestInvalidRequestID(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Handler("notify", handleNotify)
+
+	invalid := func(id string) string {
+		return `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":` + id + `}`
+	}
+	notFound := func(id string) string {
+		return `{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":` + id + `}`
+	}
+
+	runCases(t, e, []struct{ name, body, want string }{
+		{"wrong version keeps id", `{"jsonrpc":"1.0","method":"x","id":5}`, invalid(`5`)},
+		{"non-structured params keeps id", `{"jsonrpc":"2.0","method":"x","params":42,"id":"3"}`, invalid(`"3"`)},
+		{"method number keeps id", `{"jsonrpc":"2.0","method":1,"id":2}`, invalid(`2`)},
+		{"method null keeps id", `{"jsonrpc":"2.0","method":null,"id":2}`, invalid(`2`)},
+		{"jsonrpc number keeps id", `{"jsonrpc":2.0,"method":"notify","id":2}`, invalid(`2`)},
+		{"id null", `{"jsonrpc":"1.0","method":"x","id":null}`, invalid(`null`)},
+		{"id bool", `{"jsonrpc":"1.0","method":"x","id":true}`, invalid(`null`)},
+		{"id array", `{"jsonrpc":"2.0","method":"notify","id":[1]}`, invalid(`null`)},
+		{"whitespace around values", `{"jsonrpc": "2.0" ,"method": "notify" ,"id": 7 }`, `{"jsonrpc":"2.0","result":null,"id":7}`},
+		{"upper-case member names", `{"JSONRPC":"2.0","Method":"notify","Id":1}`, invalid(`null`)},
+		{"upper-case method with id", `{"jsonrpc":"2.0","Method":"notify","id":1}`, invalid(`1`)},
+		{"upper-case Id is a notification", `{"jsonrpc":"2.0","method":"notify","Id":1}`, ``},
+		{"upper-case Params ignored", `{"jsonrpc":"2.0","method":"notify","Params":1,"id":1}`, `{"jsonrpc":"2.0","result":null,"id":1}`},
+		{"empty method", `{"jsonrpc":"2.0","method":"","id":"e"}`, notFound(`"e"`)},
+		{"empty method notification", `{"jsonrpc":"2.0","method":""}`, ``},
+		{
+			"batch keeps id of invalid element",
+			`[{"jsonrpc":"1.0","method":"notify","id":1},` +
+				`{"jsonrpc":"2.0","method":"notify","params":"p","id":"2"},` +
+				`{"jsonrpc":"2.0","method":"notify","id":{}},` +
+				`{"jsonrpc":"2.0","method":"","id":4},` +
+				`5,` +
+				`{"jsonrpc":"2.0","method":"notify","id":6}]`,
+			`[` + invalid(`1`) + `,` + invalid(`"2"`) + `,` + invalid(`null`) + `,` + notFound(`4`) + `,` +
+				invalid(`null`) + `,{"jsonrpc":"2.0","result":null,"id":6}]`,
 		},
 	})
 }

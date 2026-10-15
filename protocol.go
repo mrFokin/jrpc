@@ -67,19 +67,35 @@ func parseBody(body []byte) (batch bool, requests []json.RawMessage, err error) 
 	return
 }
 
+// parseRawRequest parses a single request object. Member names are matched
+// case-sensitively. On an Invalid Request error it still returns the request
+// with ID set if the id member is valid, so the error response can echo it.
 func parseRawRequest(raw json.RawMessage) (req *Request, err error) {
-	req = &Request{}
-	if err = json.Unmarshal(raw, req); err != nil {
+	var members map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &members); err != nil {
 		return nil, err
 	}
 
-	if req.Version != version || req.Method == "" {
-		return nil, errorInvalidRequest
+	req = &Request{Params: members["params"]}
+	if v, ok := members["id"]; ok {
+		if err = req.ID.UnmarshalJSON(v); err != nil {
+			return nil, err
+		}
+	}
+
+	if !unmarshalString(members["jsonrpc"], &req.Version) || req.Version != version ||
+		!unmarshalString(members["method"], &req.Method) {
+		return req, errorInvalidRequest
 	}
 
 	if params := bytes.TrimSpace(req.Params); len(params) > 0 && params[0] != '[' && params[0] != '{' {
-		return nil, errorInvalidRequest
+		return req, errorInvalidRequest
 	}
 
 	return
+}
+
+// unmarshalString decodes v into dst and reports whether v is a JSON string.
+func unmarshalString(v json.RawMessage, dst *string) bool {
+	return len(v) > 0 && v[0] == '"' && json.Unmarshal(v, dst) == nil
 }

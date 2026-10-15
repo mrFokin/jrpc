@@ -139,13 +139,14 @@ func (j *JRPC) jrpcHandler(c *echo.Context) error {
 		resp := response{Version: version}
 
 		req, err := parseRawRequest(raw)
+		if req != nil {
+			resp.ID = req.ID.value
+		}
 		if err != nil {
 			resp.Error = errorInvalidRequest
 			responses = append(responses, resp)
 			continue
 		}
-
-		resp.ID = req.ID.value
 
 		method := j.lookup(req.Method)
 		if method == nil {
