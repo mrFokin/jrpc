@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Invalid Request echoes the request `id` when it is a string, number or null; `id` is `null` only when it is missing, of an invalid type, or the request is not an object
 - Request member names are case-sensitive: only `jsonrpc`, `method`, `params` and `id` are recognized (`"Id"` no longer turns a notification into a call)
 - An empty method name returns Method not found (`-32601`) instead of Invalid Request
+- Only JSON whitespace (space, tab, CR, LF) is allowed around the body; NBSP, `\v` or `\f` before JSON returns Parse error (`-32700`)
+- A body with invalid UTF-8 returns Parse error (`-32700`) instead of being decoded with U+FFFD substitutions
+- Any JSON number is a valid `id` and is echoed verbatim (`1e400` used to return Invalid Request with `id` `null`)
 
 ## [2.0.0] - 2026-09-07
 

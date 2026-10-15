@@ -567,6 +567,10 @@ func TestIDEcho(t *testing.T) {
 		"exponent":   `1e2`,
 		"negative":   `-1`,
 		"empty str":  `""`,
+		"overflow":   `1e400`,
+		"neg zero":   `-0`,
+		"exp plus":   `1E+2`,
+		"long int":   `123456789012345678901234567890123456789`,
 	} {
 		cases = append(cases, struct{ name, body, want string }{
 			name: name,
@@ -621,6 +625,8 @@ func TestInvalidRequestID(t *testing.T) {
 		{"id null", `{"jsonrpc":"1.0","method":"x","id":null}`, invalid(`null`)},
 		{"id bool", `{"jsonrpc":"1.0","method":"x","id":true}`, invalid(`null`)},
 		{"id array", `{"jsonrpc":"2.0","method":"notify","id":[1]}`, invalid(`null`)},
+		{"id object", `{"jsonrpc":"2.0","method":"notify","id":{"a":1}}`, invalid(`null`)},
+		{"id false", `{"jsonrpc":"2.0","method":"notify","id":false}`, invalid(`null`)},
 		{"whitespace around values", `{"jsonrpc": "2.0" ,"method": "notify" ,"id": 7 }`, `{"jsonrpc":"2.0","result":null,"id":7}`},
 		{"upper-case member names", `{"JSONRPC":"2.0","Method":"notify","Id":1}`, invalid(`null`)},
 		{"upper-case method with id", `{"jsonrpc":"2.0","Method":"notify","id":1}`, invalid(`1`)},
@@ -639,6 +645,49 @@ func TestInvalidRequestID(t *testing.T) {
 			`[` + invalid(`1`) + `,` + invalid(`"2"`) + `,` + invalid(`null`) + `,` + notFound(`4`) + `,` +
 				invalid(`null`) + `,{"jsonrpc":"2.0","result":null,"id":6}]`,
 		},
+	})
+}
+
+func TestBodyWhitespaceAndUTF8(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Handler("notify", handleNotify)
+
+	const call = `{"jsonrpc":"2.0","method":"notify","id":1}`
+	const ok = `{"jsonrpc":"2.0","result":null,"id":1}`
+
+	runCases(t, e, []struct{ name, body, want string }{
+		{"JSON whitespace around", " \t\r\n" + call + " \t\r\n", ok},
+		{"JSON whitespace around batch", "\n\t [" + call + "]\r\n ", `[` + ok + `]`},
+		{"NBSP before", "\u00a0" + call, errParseNullID},
+		{"vertical tab before", "\v" + call, errParseNullID},
+		{"form feed before", "\f" + call, errParseNullID},
+		{"NBSP after", call + "\u00a0", errParseNullID},
+		{"invalid UTF-8 in method", "{\"jsonrpc\":\"2.0\",\"method\":\"s\xff\",\"id\":1}", errParseNullID},
+		{"invalid UTF-8 in batch", "[" + call + ",{\"jsonrpc\":\"2.0\",\"method\":\"\xc3\x28\",\"id\":2}]", errParseNullID},
+		{"valid UTF-8 method", `{"jsonrpc":"2.0","method":"метод","id":1}`,
+			`{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":1}`},
+	})
+}
+
+func FuzzParse(f *testing.F) {
+	for _, s := range []string{
+		`{"jsonrpc":"2.0","method":"x","params":[1],"id":1e400}`,
+		`[{"jsonrpc":"2.0","method":"x"},1,null]`,
+		"\u00a0{}",
+		"{\"method\":\"\xff\"}",
+		`  `,
+	} {
+		f.Add([]byte(s))
+	}
+	f.Fuzz(func(t *testing.T, body []byte) {
+		_, requests, err := parseBody(body)
+		if err != nil {
+			return
+		}
+		for _, raw := range requests {
+			_, _ = parseRawRequest(raw)
+		}
 	})
 }
 
