@@ -1,6 +1,7 @@
 package jrpc
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -529,4 +530,176 @@ func middlewareSecond(next HandlerFunc) HandlerFunc {
 		}
 		return next(c)
 	}
+}
+
+const (
+	errInvalidRequestNullID = `{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}`
+	errParseNullID          = `{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`
+)
+
+func serve(e *echo.Echo, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+func runCases(t *testing.T, e *echo.Echo, cases []struct{ name, body, want string }) {
+	t.Helper()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := serve(e, tc.body)
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, tc.want, strings.TrimRight(rec.Body.String(), "\n"))
+		})
+	}
+}
+
+func TestIDEcho(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Handler("notify", handleNotify)
+
+	var cases []struct{ name, body, want string }
+	for name, id := range map[string]string{
+		"fractional": `1.5`,
+		"exponent":   `1e2`,
+		"negative":   `-1`,
+		"empty str":  `""`,
+	} {
+		cases = append(cases, struct{ name, body, want string }{
+			name: name,
+			body: `{"jsonrpc":"2.0","method":"notify","id":` + id + `}`,
+			want: `{"jsonrpc":"2.0","result":null,"id":` + id + `}`,
+		})
+	}
+	runCases(t, e, cases)
+}
+
+func TestParamsAndVersionEdgeCases(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Handler("notify", handleNotify)
+
+	runCases(t, e, []struct{ name, body, want string }{
+		{"params null without id", `{"jsonrpc":"2.0","method":"notify","params":null}`, errInvalidRequestNullID},
+		{"params empty array", `{"jsonrpc":"2.0","method":"notify","params":[],"id":1}`, `{"jsonrpc":"2.0","result":null,"id":1}`},
+		{"params empty object", `{"jsonrpc":"2.0","method":"notify","params":{},"id":1}`, `{"jsonrpc":"2.0","result":null,"id":1}`},
+		{"jsonrpc number", `{"jsonrpc":2.0,"method":"notify"}`, errInvalidRequestNullID},
+		{"jsonrpc null", `{"jsonrpc":null,"method":"notify"}`, errInvalidRequestNullID},
+		{"garbage after JSON", `{"jsonrpc":"2.0","method":"notify","id":1} x`, errParseNullID},
+		{"single null", `null`, errInvalidRequestNullID},
+		{"batch with null", `[null]`, `[` + errInvalidRequestNullID + `]`},
+		{"batch with empty array", `[[]]`, `[` + errInvalidRequestNullID + `]`},
+		{
+			"batch notifications partly invalid",
+			`[{"jsonrpc":"2.0","method":"x"},{"jsonrpc":"2.0","method":1}]`,
+			`[` + errInvalidRequestNullID + `]`,
+		},
+	})
+}
+
+func TestBatchNotificationFailuresSilent(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Handler("notify", handleNotify)
+	j.Handler("error.standart", handleWithStandartError)
+	j.Handler("error.panic", handleWithPanic)
+
+	runCases(t, e, []struct{ name, body, want string }{
+		{
+			"error and panic notifications omitted",
+			`[{"jsonrpc":"2.0","method":"error.standart"},` +
+				`{"jsonrpc":"2.0","method":"error.panic"},` +
+				`{"jsonrpc":"2.0","method":"notify","id":1}]`,
+			`[{"jsonrpc":"2.0","result":null,"id":1}]`,
+		},
+	})
+}
+
+func TestResultNilAndUnmarshalable(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Handler("nil", func(c *Context) error { return c.Result(nil) })
+	j.Handler("chan", func(c *Context) error { return c.Result(make(chan int)) })
+
+	runCases(t, e, []struct{ name, body, want string }{
+		{"Result(nil)", `{"jsonrpc":"2.0","method":"nil","id":1}`, `{"jsonrpc":"2.0","result":null,"id":1}`},
+		{
+			"Result(chan)",
+			`{"jsonrpc":"2.0","method":"chan","id":1}`,
+			`{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error","data":"json: unsupported type: chan int"},"id":1}`,
+		},
+	})
+}
+
+func TestErrorFalsyData(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Handler("empty", func(c *Context) error { return NewError(1, "m", "") })
+	j.Handler("zero", func(c *Context) error { return NewError(1, "m", 0) })
+	j.Handler("false", func(c *Context) error { return NewError(1, "m", false) })
+
+	for name, data := range map[string]string{"empty": `""`, "zero": `0`, "false": `false`} {
+		t.Run(name, func(t *testing.T) {
+			rec := serve(e, `{"jsonrpc":"2.0","method":"`+name+`","id":1}`)
+			assert.Equal(t,
+				`{"jsonrpc":"2.0","error":{"code":1,"message":"m","data":`+data+`},"id":1}`,
+				strings.TrimRight(rec.Body.String(), "\n"))
+		})
+	}
+}
+
+func TestResponseHeadersAndEmptyNotificationBody(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Handler("notify", handleNotify)
+
+	rec := serve(e, `{"jsonrpc":"2.0","method":"notify","id":1}`)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, echo.MIMEApplicationJSON, rec.Header().Get(echo.HeaderContentType))
+
+	rec = serve(e, `{"jsonrpc":"2.0","method":"notify"}`)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Empty(t, rec.Body.String())
+}
+
+func TestRequestBodyExactLimit(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Handler("notify", handleNotify)
+
+	body := `{"jsonrpc":"2.0","method":"notify","id":1}`
+	body += strings.Repeat(" ", maxRequestBody-len(body))
+	assert.Len(t, body, maxRequestBody)
+	rec := serve(e, body)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, `{"jsonrpc":"2.0","result":null,"id":1}`, strings.TrimRight(rec.Body.String(), "\n"))
+}
+
+func TestContextRequest(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+
+	var gotMethod string
+	var gotID json.RawMessage
+	called := false
+	j.Handler("inspect", func(c *Context) error {
+		called = true
+		gotMethod = c.Request().Method
+		gotID = c.Request().ID.Value()
+		return c.Result(string(gotID))
+	})
+
+	rec := serve(e, `{"jsonrpc":"2.0","method":"inspect","id":"abc"}`)
+	assert.Equal(t, `{"jsonrpc":"2.0","result":"\"abc\"","id":"abc"}`, strings.TrimRight(rec.Body.String(), "\n"))
+	assert.Equal(t, "inspect", gotMethod)
+	assert.Equal(t, `"abc"`, string(gotID))
+
+	called, gotID = false, json.RawMessage("sentinel")
+	rec = serve(e, `{"jsonrpc":"2.0","method":"inspect"}`)
+	assert.True(t, called)
+	assert.Nil(t, gotID)
+	assert.Empty(t, rec.Body.String())
 }
