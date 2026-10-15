@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"unicode/utf8"
 )
 
 const (
@@ -17,13 +18,14 @@ type id struct {
 	present bool
 }
 
+// UnmarshalJSON accepts a string, number or null id. data is valid JSON, so the
+// first byte determines its type; numbers are kept verbatim, whatever their range.
 func (i *id) UnmarshalJSON(data []byte) error {
-	var v any
-	if err := json.Unmarshal(data, &v); err != nil {
-		return err
+	if len(data) == 0 {
+		return errorInvalidRequest
 	}
-	switch v.(type) {
-	case nil, string, float64:
+	switch c := data[0]; {
+	case c == '"', c == 'n', c == '-', '0' <= c && c <= '9':
 		i.value = bytes.Clone(data)
 		i.present = true
 		return nil
@@ -51,9 +53,14 @@ type response struct {
 }
 
 func parseBody(body []byte) (batch bool, requests []json.RawMessage, err error) {
-	body = bytes.TrimSpace(body)
+	// Only JSON whitespace (RFC 8259); trailing whitespace is left to json.Unmarshal.
+	body = bytes.TrimLeft(body, " \t\r\n")
 	if len(body) == 0 {
 		return false, nil, io.ErrUnexpectedEOF
+	}
+	// encoding/json silently replaces invalid UTF-8 with U+FFFD.
+	if !utf8.Valid(body) {
+		return false, nil, errorParse
 	}
 
 	if body[0] == batchRequestKey {
@@ -67,19 +74,35 @@ func parseBody(body []byte) (batch bool, requests []json.RawMessage, err error) 
 	return
 }
 
+// parseRawRequest parses a single request object. Member names are matched
+// case-sensitively. On an Invalid Request error it still returns the request
+// with ID set if the id member is valid, so the error response can echo it.
 func parseRawRequest(raw json.RawMessage) (req *Request, err error) {
-	req = &Request{}
-	if err = json.Unmarshal(raw, req); err != nil {
+	var members map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &members); err != nil {
 		return nil, err
 	}
 
-	if req.Version != version || req.Method == "" {
-		return nil, errorInvalidRequest
+	req = &Request{Params: members["params"]}
+	if v, ok := members["id"]; ok {
+		if err = req.ID.UnmarshalJSON(v); err != nil {
+			return nil, err
+		}
 	}
 
-	if params := bytes.TrimSpace(req.Params); len(params) > 0 && params[0] != '[' && params[0] != '{' {
-		return nil, errorInvalidRequest
+	if !unmarshalString(members["jsonrpc"], &req.Version) || req.Version != version ||
+		!unmarshalString(members["method"], &req.Method) {
+		return req, errorInvalidRequest
+	}
+
+	if p := req.Params; len(p) > 0 && p[0] != '[' && p[0] != '{' {
+		return req, errorInvalidRequest
 	}
 
 	return
+}
+
+// unmarshalString decodes v into dst and reports whether v is a JSON string.
+func unmarshalString(v json.RawMessage, dst *string) bool {
+	return len(v) > 0 && v[0] == '"' && json.Unmarshal(v, dst) == nil
 }

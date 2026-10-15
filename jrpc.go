@@ -6,8 +6,11 @@
 //
 // A notification (no id) returns HTTP 200 with an empty body.
 // A handler that does not call [Context.Result] responds with JSON null.
-// Return [NewError] or [NewErrorInvalidParams] from a handler; a plain error
-// and a panic become Internal error (-32603).
+// Return [NewError] or [NewErrorInvalidParams] from a handler; a plain error,
+// a nil *JRPCError and a panic become Internal error (-32603).
+//
+// By-name params are matched case-insensitively, as in encoding/json. Method
+// names starting with "rpc." are reserved by the spec and should not be registered.
 //
 // The request id is available as Request.ID.Value(). This package does not
 // provide HandleMethod, a JRPC interface, or a WebSocket transport.
@@ -61,6 +64,8 @@ func handleMethod(ec *echo.Context, method HandlerFunc, request *Request) (resul
 		var rpcErr *JRPCError
 		if !errors.As(e, &rpcErr) {
 			rpcErr = errorInternal(e.Error())
+		} else if rpcErr == nil {
+			rpcErr = errorInternal(nil)
 		}
 		return nil, rpcErr
 	}
@@ -139,13 +144,14 @@ func (j *JRPC) jrpcHandler(c *echo.Context) error {
 		resp := response{Version: version}
 
 		req, err := parseRawRequest(raw)
+		if req != nil {
+			resp.ID = req.ID.value
+		}
 		if err != nil {
 			resp.Error = errorInvalidRequest
 			responses = append(responses, resp)
 			continue
 		}
-
-		resp.ID = req.ID.value
 
 		method := j.lookup(req.Method)
 		if method == nil {
