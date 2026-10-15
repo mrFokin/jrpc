@@ -725,6 +725,27 @@ func TestResultNilAndUnmarshalable(t *testing.T) {
 	})
 }
 
+func TestTypedNilError(t *testing.T) {
+	e := echo.New()
+	j := Endpoint(e, "/")
+	j.Handler("nil", func(c *Context) error {
+		var err *JRPCError
+		return err
+	})
+	j.Handler("wrapped", func(c *Context) error {
+		var err *JRPCError
+		return fmt.Errorf("wrap: %w", err)
+	})
+
+	internal := `{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":1}`
+	runCases(t, e, []struct{ name, body, want string }{
+		{"typed nil", `{"jsonrpc":"2.0","method":"nil","id":1}`, internal},
+		{"wrapped typed nil", `{"jsonrpc":"2.0","method":"wrapped","id":1}`, internal},
+		{"typed nil notification", `{"jsonrpc":"2.0","method":"nil"}`, ``},
+		{"wrapped typed nil notification", `{"jsonrpc":"2.0","method":"wrapped"}`, ``},
+	})
+}
+
 func TestErrorFalsyData(t *testing.T) {
 	e := echo.New()
 	j := Endpoint(e, "/")

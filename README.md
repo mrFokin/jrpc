@@ -15,11 +15,19 @@ Echo v4: [`v1.1.0`](https://github.com/mrFokin/jrpc/tree/v1.1.0) (`github.com/mr
 - Echo v5 only. `Endpoint` registers `POST` and accepts `application/json` only.
 - `Context` is a struct. HTTP request: `c.Echo`. JSON-RPC request: `c.Request()`.
 - Register methods with `Method` (typed params and result) or `Handler` (manual `Bind` / `Result`).
-- Return `NewError` or `NewErrorInvalidParams`. A plain `error` and a panic become Internal error (`-32603`).
+- Return `NewError` or `NewErrorInvalidParams`. A plain `error`, a nil `*JRPCError` and a panic become Internal error (`-32603`).
 - No `id` (notification) → HTTP 200 and an empty body. No `Result` → JSON `null`.
 - Request id: `c.Request().ID.Value()`.
-- Body limit: 1 MiB (`413`). Batch → JSON array of responses.
+- Batch → JSON array of responses.
 - Not in this package: `HandleMethod`, a `JRPC` interface, WebSocket, other HTTP frameworks.
+
+### Deviations and limits
+
+- HTTP: `POST` only, `application/json` only (`415`), body up to 1 MiB (`413`).
+- Every JSON-RPC error, including Parse error, is sent with HTTP 200.
+- A notification, or a batch of only notifications, gets HTTP 200 with an empty body.
+- By-name params are matched case-insensitively (`encoding/json`): `{"Minuend":42}` binds to `json:"minuend"`.
+- Method names starting with `rpc.` are reserved by the spec; the package does not block them, but do not register them.
 
 ## Install
 
